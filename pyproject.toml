@@ -1,0 +1,16 @@
+[project]
+name = "fb-smartorder"
+version = "0.1.0"
+description = "An Intelligent Data Pipeline and Order Automation System for the Food & Beverage Sector."
+readme = "README.md"
+authors = [
+    { name = "electorado", email = "pamoncayo@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "pymongo>=4.17.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.18,<0.12.0"]
+build-backend = "uv_build"
