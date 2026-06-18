@@ -1,14 +1,16 @@
+# === INFRAESTRUCTURA DE BASE DE DATOS ===
+# Este contenedor levanta la base de datos principal para el pipeline
 services:
   mongodb:
-    image: mongo:latest
+    image: mongo:latest #carga la imagen de MongoDB
     container_name: fb_smartorder_db
     ports:
-      - "27017:27017"
+      - "27017:27017" #puerto por defecto? o lo has asignado al azar?
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-supplypassword}
     volumes:
-      - mongo_data:/data/db
+      - mongo_data:/data/db #esto dónde se va a guardar?
 
 volumes:
-  mongo_data:
+  mongo_data: #???
