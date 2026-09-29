@@ -38,3 +38,35 @@ Para resolver la flexibilidad que requieren los datos y la robustez que necesita
 ### 📱 4. Capa de Interfaz de Usuario (Fricción Cero)
 *   **Tecnología Principal:** **Streamlit / Web Responsive**
 *   **Justificación:** Con el objetivo de optimizar los tiempos de desarrollo y evitar la sobreingeniería de un entorno móvil nativo complejo (como React Native o Flutter), se ha optado por un enfoque web ágil y adaptativo. Esto permite poner el foco del proyecto donde realmente aporta valor de negocio: la arquitectura del dato, el procesamiento del backend y un flujo de experiencia de usuario (UX) diseñado específicamente para el ritmo de una cocina.
+
+---
+
+## ⚡ Guía de Ejecución Rápida
+
+### 1. Iniciar Infraestructura de Base de Datos (MongoDB + GridFS)
+```bash
+docker compose up -d
+```
+
+### 2. Sincronizar Dependencias del Entorno
+```bash
+uv sync
+```
+
+### 3. Ejecutar Pipeline ETL de Ingesta y Entity Resolution
+```bash
+uv run python3 src/main.py
+```
+
+### 4. Iniciar Servidor Backend FastAPI
+```bash
+uv run uvicorn fb_smartorder.api:app --reload --port 8000
+```
+*Documentación interactiva Swagger disponible en: `http://localhost:8000/docs`*
+
+### 5. Iniciar Interfaz de Usuario (Streamlit)
+```bash
+uv run streamlit run src/fb_smartorder/app_ui.py
+```
+*Panel Web del Chef accesible en: `http://localhost:8501`*
+
