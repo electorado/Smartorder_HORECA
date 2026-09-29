@@ -17,6 +17,7 @@ dependencies = [
     "pymongo>=4.10.0",
     "pypdf>=6.0.0",
     "pytesseract>=0.3.13",
+    "python-dotenv>=1.2.3",
     "python-multipart>=0.0.12",
     "rapidfuzz>=3.10.0",
     "streamlit>=1.40.0",
