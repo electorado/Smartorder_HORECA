@@ -43,3 +43,6 @@ data/
 # === Sistema Operativo (Linux / macOS) ===
 .DS_Store
 Thumbs.db
+
+# === Documentación local / borradores de entrega ===
+docs/
