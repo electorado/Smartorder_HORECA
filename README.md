@@ -6,67 +6,62 @@ An Intelligent Data Pipeline and Order Automation System for the Food & Beverage
 
 ## 🚀 El Proyecto
 
-Este proyecto nace como mi **Trabajo de Fin de Ciclo (TFC)** para el Grado Superior en Desarrollo de Aplicaciones Multiplataforma (DAM). Sin embargo, no es solo un proyecto académico; es una solución de software diseñada desde la experiencia directa en la gestión del sector de la hostelería (Food & Beverage).
+Este proyecto nace como mi **Trabajo de Fin de Ciclo (TFC)** para el Grado Superior en Desarrollo de Aplicaciones Multiplataforma (DAM). Es una solución pensada desde la experiencia en hostelería para resolver un problema cotidiano de los restaurantes.
 
 ### El Problema Real
-En el día a día de una cocina profesional, la gestión de compras puede convertirse en una tarea ineficiente y caótica. Cada proveedor envía sus catálogos, ofertas y actualizaciones de precios en formatos completamente dispares y no estructurados (Excel caóticos, PDFs densos, imágenes de albaranes o mensajes de texto). Un jefe de cocina pierde horas comparando precios manualmente o gestionando pedidos por canales fragmentados en mitad del servicio, incluso teniendo que enviar varios emails o mensajes a los diferentes proveedores.
+En el día a día de una cocina, la gestión de compras suele ser caótica. Cada proveedor envía sus catálogos, ofertas y precios en formatos distintos (hojas de Excel, PDFs a varias columnas, notas o mensajes). Quien gestiona los pedidos pierde mucho tiempo comparando precios a mano y contactando a cada proveedor por separado.
 
 ### La Solución
-**[F&B SmartOrder]** automatiza y unifica este proceso de principio a fin a través de dos componentes principales:
-1. **Un Pipeline de Ingeniería de Datos (Backend):** Que ingiere, limpia y normaliza de forma flexible los catálogos caóticos de los proveedores empleando bases de datos NoSQL.
-2. **Una Interfaz Móvil Ágil (Frontend):** Diseñada para "fricción cero", que permite al chef buscar ingredientes de forma unificada, resolver conflictos de existencias, añadir notas o productos fuera de catálogo y disparar pedidos automáticos consolidados con un solo clic.
+**[F&B SmartOrder]** unifica y agiliza este proceso:
+1. **Pipeline de datos y backend:** Ingesta y normaliza los catálogos en MongoDB, unifica productos equivalentes bajo un mismo ingrediente maestro y expone los datos mediante una API en FastAPI.
+2. **Interfaz de usuario:** Un panel web en Streamlit para validar datos, buscar ingredientes y comparar precios, y una app móvil nativa en Android (Kotlin) para hacer los pedidos desde la cocina o el almacén.
 
 ---
 
 ## 🛠️ Arquitectura y Tecnologías
 
-Para resolver la flexibilidad que requieren los datos y la robustez que necesita la automatización, se ha diseñado una arquitectura desacoplada basada en servicios:
-Para resolver la flexibilidad que requieren los datos y la robustez que necesita la automatización, se ha diseñado una arquitectura desacoplada basada en servicios:
+El sistema sigue una arquitectura desacoplada por capas:
 
-### 🗄️ 1. Capa de Almacenamiento e Ingesta (El Caos Estructurado)
-*   **Tecnología Principal:** **MongoDB (BSON / GridFS)**
-*   **Justificación:** Debido a la naturaleza dispar de los catálogos de los proveedores (XLSX, PDF, imágenes), las bases de datos relacionales tradicionales fallarían por rigidez de esquema. MongoDB aporta la flexibilidad necesaria para almacenar los documentos en su estado nativo. Además, se utiliza GridFS para almacenar y respaldar los archivos físicos originales (como fotos de ofertas o PDFs), permitiendo una auditoría visual en caso de discrepancias.
+### 🗄️ 1. Almacenamiento e Ingesta
+* **MongoDB y GridFS**: Almacena los catálogos en colecciones documentales y guarda los archivos originales (PDFs, Excels) para auditoría visual si surgen dudas.
 
-### 🧠 2. Capa del Pipeline y Lógica de Datos (El Cerebro ETL)
-*   **Tecnología Principal:** **Python (Pandas, OpenPyXL, PyPDF2)**
-*   **Justificación:** Python es el estándar de la industria en Ingeniería de Datos. Esta capa ejecuta el proceso de Extracción, Transformación y Carga (ETL). Se encarga de limpiar el texto procedente de MongoDB (eliminación de ruidos, estandarización de formatos) y ejecuta algoritmos de coincidencia (*Entity Resolution*) para emparejar el producto bruto del proveedor con el ingrediente maestro unificado del sistema.
+### 🧠 2. Pipeline ETL y Normalización
+* **Python (Pandas, OpenPyXL, PyPDF, RapidFuzz)**: Extrae los datos, limpia el texto y empareja los productos de distintos proveedores con el ingrediente maestro correspondiente.
 
-### ⚙️ 3. Capa del Servidor y API (El Conector)
-*   **Tecnología Principal:** **FastAPI (Python)**
-*   **Justificación:** Proporciona un backend asíncrono de alto rendimiento que expone los endpoints necesarios para alimentar la interfaz de usuario. Gestiona la lógica de las peticiones en tiempo real (autocompletado, resolución de conflictos de proveedores) y orquesta la automatización de salida (generación de hojas de pedido y envío asíncrono de emails/notificaciones a los proveedores).
+### ⚙️ 3. Backend y API
+* **FastAPI**: Servidor asíncrono con endpoints REST para búsquedas, comparativas de precios y generación de pedidos.
 
-### 📱 4. Capa de Interfaz de Usuario (Fricción Cero)
-*   **Tecnología Principal:** **Streamlit / Web Responsive**
-*   **Justificación:** Con el objetivo de optimizar los tiempos de desarrollo y evitar la sobreingeniería de un entorno móvil nativo complejo (como React Native o Flutter), se ha optado por un enfoque web ágil y adaptativo. Esto permite poner el foco del proyecto donde realmente aporta valor de negocio: la arquitectura del dato, el procesamiento del backend y un flujo de experiencia de usuario (UX) diseñado específicamente para el ritmo de una cocina.
+### 📱 4. Interfaz de Usuario
+* **Streamlit**: Panel web para probar el sistema, buscar ingredientes y comparar ofertas de proveedores.
+* **Android Nativo (Kotlin)**: Aplicación móvil para gestionar el inventario y tramitar pedidos desde el teléfono.
 
 ---
 
 ## ⚡ Guía de Ejecución Rápida
 
-### 1. Iniciar Infraestructura de Base de Datos (MongoDB + GridFS)
+### 1. Iniciar Base de Datos (MongoDB + GridFS)
 ```bash
 docker compose up -d
 ```
 
-### 2. Sincronizar Dependencias del Entorno
+### 2. Sincronizar Dependencias
 ```bash
 uv sync
 ```
 
-### 3. Ejecutar Pipeline ETL de Ingesta y Entity Resolution
+### 3. Ejecutar Pipeline ETL
 ```bash
 uv run python3 src/main.py
 ```
 
-### 4. Iniciar Servidor Backend FastAPI
+### 4. Iniciar Backend FastAPI
 ```bash
 uv run uvicorn fb_smartorder.api:app --reload --port 8000
 ```
-*Documentación interactiva Swagger disponible en: `http://localhost:8000/docs`*
+*Documentación Swagger en: `http://localhost:8000/docs`*
 
-### 5. Iniciar Interfaz de Usuario (Streamlit)
+### 5. Iniciar Interfaz Web (Streamlit)
 ```bash
 uv run streamlit run src/fb_smartorder/app_ui.py
 ```
-*Panel Web del Chef accesible en: `http://localhost:8501`*
-
+*Panel web accesible en: `http://localhost:8501`*
