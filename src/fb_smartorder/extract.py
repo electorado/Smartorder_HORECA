@@ -112,13 +112,26 @@ def extract_pdf(
     reader = PdfReader(path)
     products: List[Dict[str, Any]] = []
 
-    price_pattern = re.compile(r'([\d]+[.,]\d{1,2})\s*€\s*/?\s*(kg|ud|estuche|bandeja|botella|garrafa|l)?', re.IGNORECASE)
+    price_pattern = re.compile(r'([\d]+[.,\'’]\d{1,2})\s*€\s*/?\s*([a-záéíóú]+)?', re.IGNORECASE)
     code_pattern = re.compile(r'[C|c][:.]?\s*(\d{4})', re.IGNORECASE)
-    single_line_pattern = re.compile(r'(.+?)\s+([\d]+[.,]\d{1,2})\s*€?\s*(?:/\s*(\w+))?', re.IGNORECASE)
+    single_line_pattern = re.compile(r'(.+?)\s+([\d]+[.,\'’]\d{1,2})\s*€?\s*(?:/\s*(\w+))?', re.IGNORECASE)
 
     for index, page in enumerate(reader.pages, start=1):
         text = page.extract_text() or ""
-        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        raw_lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+        # Preprocesar líneas: separar texto concatenado por OCR y precios que preceden al siguiente producto
+        lines = []
+        for l in raw_lines:
+            # Separar palabras pegadas (ej. raciónTarta -> ración Tarta)
+            l_spaced = re.sub(r'([a-zñáéíóú])([A-ZÁÉÍÓÚ])', r'\1 \2', l)
+            # Si una línea empieza por precio/ración y le sigue texto (ej. "1,98€/ración Tarta de Lotus")
+            m_lead = re.match(r'^([\d]+[.,\'’]\d{1,2}\s*€(?:\s*/\s*[a-záéíóú]+)?)\s+(.+)', l_spaced, re.IGNORECASE)
+            if m_lead:
+                lines.append(m_lead.group(1))
+                lines.append(m_lead.group(2))
+            else:
+                lines.append(l_spaced)
 
         current_name_acc = []
         current_code = None
@@ -135,7 +148,7 @@ def extract_pdf(
             match_price = price_pattern.search(line)
             if match_price:
                 try:
-                    price_val = float(match_price.group(1).replace(",", "."))
+                    price_val = float(match_price.group(1).replace(",", ".").replace("'", ".").replace("’", "."))
                     unit_val = match_price.group(2).lower() if match_price.group(2) else "ud"
 
                     # Si acumulamos líneas arriba, usar como nombre
@@ -144,13 +157,17 @@ def extract_pdf(
                     else:
                         # Si no hay acumulado, probar regex monolínea
                         m_single = single_line_pattern.search(line)
-                        name_str = m_single.group(1).strip() if m_single else line
+                        name_str = m_single.group(1).strip() if m_single else ""
 
-                    # Limpiar ruidos de formato (ej. 16uds X 0,2kg)
+                    # Limpiar ruidos de formato (ej. 16uds X 0,2kg) y precios residuales
                     name_clean = re.sub(r'\b\d+\s*uds?\s*x\b.*', '', name_str, flags=re.IGNORECASE).strip()
                     name_clean = re.sub(r'\(?\d+\s*[X|x]\s*[\d.,]+\s*k?g\)?', '', name_clean, flags=re.IGNORECASE).strip()
+                    name_clean = re.sub(r'\b\d+[.,\']\d{1,2}\s*€(?:/\w+)?\b', '', name_clean).strip()
 
-                    if len(name_clean) >= 3 and price_val > 0:
+                    # Descartar si el nombre resultante no tiene letras o es solo residuo numérico
+                    has_letters = bool(re.search(r'[a-záéíóúñ]{3,}', name_clean, re.IGNORECASE))
+
+                    if has_letters and price_val > 0:
                         products.append({
                             "page": index,
                             "supplier_product_code": current_code,
@@ -184,3 +201,22 @@ def extract_image_list(image_bytes: bytes) -> List[Dict[str, Any]]:
     """Extrae productos y cantidades desde la imagen de una lista manuscrita en la nunca o pizarra."""
     from .ocr import process_fridge_photo
     return process_fridge_photo(image_bytes)
+
+
+class CatalogExtractor:
+    """Clase de servicio del pipeline ETL encargada de la ingesta y extracción multimodal."""
+
+    @staticmethod
+    def extract_excel(file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+        """Extrae productos y precios desde hojas de cálculo Excel."""
+        return extract_excel(file_path)
+
+    @staticmethod
+    def extract_pdf(file_path: Union[str, Path], save_output: bool = True) -> List[Dict[str, Any]]:
+        """Extrae productos y precios desde catálogos y tarifas en formato PDF."""
+        return extract_pdf(file_path, save_output=save_output)
+
+    @staticmethod
+    def extract_ocr(image_bytes: bytes) -> List[Dict[str, Any]]:
+        """Extrae líneas manuscritas mediante reconocimiento óptico de caracteres (OCR)."""
+        return extract_image_list(image_bytes)

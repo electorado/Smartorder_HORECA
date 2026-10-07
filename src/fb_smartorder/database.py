@@ -1,6 +1,9 @@
 import os
+from dotenv import load_dotenv
 from pymongo import MongoClient
 import gridfs
+
+load_dotenv()
 
 def get_db_client():
     """Inicializa y devuelve el cliente utilizando variables de entorno o valores por defecto seguros."""
@@ -8,8 +11,8 @@ def get_db_client():
     password = os.getenv("MONGO_ROOT_PASSWORD", "supplypassword")
     host = os.getenv("MONGO_HOST", "localhost")
     port = os.getenv("MONGO_PORT", "27017")
-
     connection_string = f"mongodb://{user}:{password}@{host}:{port}/"
+
     return MongoClient(connection_string, serverSelectionTimeoutMS=5000)
 
 def get_database(db_name="fb_smartorder"):
@@ -106,3 +109,39 @@ def init_db(db_name="fb_smartorder"):
     except Exception as e:
         print(f"Error inicializando base de datos: {e}")
         return False
+
+
+class DatabaseManager:
+    """Clase de infraestructura y persistencia que gestiona MongoDB y GridFS."""
+
+    @staticmethod
+    def get_client():
+        """Devuelve el cliente activo de MongoClient."""
+        return get_db_client()
+
+    @staticmethod
+    def get_database(db_name="fb_smartorder"):
+        """Devuelve la base de datos de MongoDB configurada."""
+        return get_database(db_name)
+
+    @staticmethod
+    def get_gridfs(db_name="fb_smartorder"):
+        """Devuelve el bucket de GridFS para almacenamiento de archivos binarios."""
+        return get_gridfs(db_name)
+
+    @staticmethod
+    def init_db(db_name="fb_smartorder"):
+        """Inicializa colecciones, índices y semillas maestras."""
+        return init_db(db_name)
+
+    @staticmethod
+    def save_catalog_file(filename: str, file_bytes: bytes, supplier_id: str) -> str:
+        """Guarda un fichero original de catálogo en GridFS."""
+        from .load import save_catalog_file as _save
+        return _save(filename, file_bytes, supplier_id)
+
+    @staticmethod
+    def load_raw_products(provider_id: str, products: list, provider_name: str = None) -> int:
+        """Carga e indexa los productos procesados en MongoDB."""
+        from .load import load_raw_products as _load
+        return _load(provider_id, products, provider_name)
