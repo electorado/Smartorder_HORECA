@@ -94,6 +94,48 @@ def get_ingredients(query: Optional[str] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/products")
+def get_products(
+    query: Optional[str] = Query(None, description="Filtro opcional por nombre o categoría"),
+    supplier_id: Optional[str] = Query(None, description="Filtro opcional por proveedor")
+):
+    """Devuelve el catálogo de productos unificados con su mejor oferta para la app móvil."""
+    try:
+        db = get_database()
+        filter_query = {}
+        if query:
+            filter_query["$or"] = [
+                {"name": {"$regex": query, "$options": "i"}},
+                {"category": {"$regex": query, "$options": "i"}}
+            ]
+
+        masters = list(db["ingredientes_maestros"].find(filter_query, {"_id": 0}))
+
+        products = []
+        for m in masters:
+            offer_query = {"master_ingredient_id": m["id"]}
+            if supplier_id:
+                offer_query["supplier_id"] = supplier_id
+
+            offers = list(db["productos_brutos"].find(offer_query, {"_id": 0}))
+            offers.sort(key=lambda x: x.get("price", 999999.0))
+            best_offer = offers[0] if offers else None
+
+            products.append({
+                "id": m["id"],
+                "name": m["name"],
+                "category": m.get("category", "General"),
+                "standard_unit": m.get("standard_unit", "kg"),
+                "best_price": best_offer.get("price") if best_offer else None,
+                "best_supplier_id": best_offer.get("supplier_id") if best_offer else None,
+                "best_supplier_name": best_offer.get("supplier_name") if best_offer else None,
+                "available_offers": len(offers)
+            })
+
+        return {"products": products}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/v1/catalogs/upload")
 async def upload_catalog(
     supplier_id: str = Form(...),
