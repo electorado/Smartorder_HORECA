@@ -46,3 +46,17 @@ Thumbs.db
 
 # === Documentación local / borradores de entrega ===
 docs/
+ANTIGRAVITY_GUIDE.md
+
+# === Android / Gradle (Android Studio) ===
+.gradle/
+build/
+android/.gradle/
+android/build/
+android/*/build/
+android/local.properties
+android/.cxx/
+android/*.iml
+android/*/*.iml
+*.apk
+*.aab
