@@ -1,4 +1,19 @@
 <resources>
     <string name="app_name">F&amp;B SmartOrder</string>
-</resources>
+    <string name="header_brand">F&amp;B SMARTORDER</string>
+    <string name="order_number">PEDIDO #042</string>
+    <string name="search_hint">Buscar / añadir ingrediente…</string>
+    <string name="btn_send_order">ENVIAR PEDIDO</string>
+    <string name="ok_badge">OK!</string>
+    <string name="empty_catalog">No se encontraron ingredientes</string>
+    <string name="loading_catalog">Cargando catálogo…</string>
+    <string name="urgent_tag">¡Urgente!</string>
 
+    <string name="btn_notes_additionals">+ NOTAS Y ADICIONALES</string>
+    <string name="btn_upload_catalog">+ CATÁLOGO</string>
+    <string name="dialog_notes_title">Notas y Pedidos Fuera de Catálogo</string>
+    <string name="dialog_notes_hint">Instrucciones de entrega (ej. Venid antes de las 10:00)</string>
+    <string name="dialog_catalog_title">Subir Catálogo de Proveedor</string>
+    <string name="btn_pick_contact">Elegir de Contactos 📱</string>
+    <string name="btn_pick_pdf">Seleccionar PDF 📄</string>
+</resources>

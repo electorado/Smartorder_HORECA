@@ -2,10 +2,6 @@ package com.fb.smartorder.model
 
 import com.google.gson.annotations.SerializedName
 
-/**
- * Modelo de datos representativo de un ingrediente o producto unificado
- * devuelto por el endpoint GET /api/v1/products de FastAPI.
- */
 data class Product(
     @SerializedName("id")
     val id: String,
@@ -32,11 +28,7 @@ data class Product(
     val availableOffers: Int = 0
 )
 
-/**
- * Envoltorio para la respuesta JSON de la API: { "products": [ ... ] }
- */
 data class ProductsResponse(
     @SerializedName("products")
     val products: List<Product> = emptyList()
 )
-
