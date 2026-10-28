@@ -34,7 +34,7 @@ __pycache__/
 *.swp
 
 # === Datos Locales de Prueba (Evitar subir catálogos pesados) ===
-data/
+/data/
 *.pdf
 *.xlsx
 *.xls
