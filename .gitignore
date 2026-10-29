@@ -47,6 +47,7 @@ Thumbs.db
 # === Documentación local / borradores de entrega ===
 docs/
 ANTIGRAVITY_GUIDE.md
+AGENTS.md
 
 # === Android / Gradle (Android Studio) ===
 .gradle/
