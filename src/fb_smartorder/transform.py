@@ -48,7 +48,7 @@ KNOWN_CUTS = {
 
 def clean_tokens(text: str) -> list[str]:
     """Extrae tokens normalizados semántica y fonéticamente."""
-    text_norm = unicodedata.normalize("NFD", text)
+    text_norm = unicodedata.normalize("NFKD", text)
     text_clean = "".join(c for c in text_norm if unicodedata.category(c) != "Mn").lower()
     text_clean = re.sub(r'\(?c[.:]?\s*\d+\)?', '', text_clean)
     text_clean = re.sub(r'\b\d+[.,\'’]\d{1,2}\s*€(?:/\w+)?\b', '', text_clean)
@@ -83,7 +83,7 @@ def clean_product_text(text: str) -> str:
     if not text:
         return ""
     
-    text_normalized = unicodedata.normalize('NFD', text)
+    text_normalized = unicodedata.normalize('NFKD', text)
     text_without_accents = ''.join(c for c in text_normalized if unicodedata.category(c) != 'Mn')
     text_clean = text_without_accents.lower().strip()
     
@@ -104,6 +104,111 @@ def clean_product_text(text: str) -> str:
     return text_clean
 
 
+def normalize_metric_dimension(
+    price: float,
+    unit: str,
+    format_str: str = ""
+) -> Dict[str, Any]:
+    """Normaliza formatos y unidades heterogéneas a unidades canónicas estándar (kg, L, ud).
+    
+    Calcula la métrica base y el precio unitario comparable (precio/kg, precio/L o precio/ud)
+    para permitir comparativas homogéneas entre ofertas de diferentes proveedores y empaques.
+    
+    Ejemplos:
+        - 12.50 €/caja con formato '1ud X 3.6kg' -> 3.47 €/kg (canonical_unit='kg')
+        - 4.50 €/sobre con formato '5uds X 0.1kg' -> 45.00 €/kg (canonical_unit='kg')
+        - 7.98 €/ud con formato '16uds X 0.2kg' -> 39.90 €/kg (canonical_unit='kg')
+        - 28.80 €/kg -> 28.80 €/kg (canonical_unit='kg')
+    """
+    unit_clean = (unit or "").lower().strip()
+    fmt = (format_str or "").lower().strip()
+
+    # 1. Caso base: la unidad ya está en kilos
+    if unit_clean in ["kg", "kilo", "kilos", "kilogramo"]:
+        return {
+            "canonical_unit": "kg",
+            "canonical_quantity": 1.0,
+            "canonical_price": round(price, 2)
+        }
+
+    # 2. Caso base: la unidad ya está en litros
+    if unit_clean in ["l", "litro", "litros", "l."]:
+        return {
+            "canonical_unit": "L",
+            "canonical_quantity": 1.0,
+            "canonical_price": round(price, 2)
+        }
+
+    # 3. Empaques compuestos: Nuds X M kg/gr/L/ml (ej. 14uds X 1kg, 12ud X 0,25kg)
+    mult_match = re.search(r'(\d+)\s*uds?\s*[xX]\s*([\d.,]+)\s*(k?g|m?l|l)\b', fmt)
+    if mult_match:
+        count = float(mult_match.group(1))
+        unit_weight = float(mult_match.group(2).replace(',', '.'))
+        measure_unit = mult_match.group(3).lower()
+
+        if measure_unit in ["g", "gr"]:
+            unit_weight /= 1000.0
+            measure_unit = "kg"
+        elif measure_unit == "ml":
+            unit_weight /= 1000.0
+            measure_unit = "l"
+
+        canonical_unit = "kg" if measure_unit == "kg" else "L" if measure_unit == "l" else "ud"
+
+        # Si el precio es de la caja/estuche completo, dividimos entre el peso total del lote
+        if unit_clean in ["caja", "estuche", "pack", "lote"]:
+            total_qty = count * unit_weight
+            canonical_price = price / total_qty if total_qty > 0 else price
+        # Si el precio es por sobre/pieza/ud/pizza individual, dividimos entre el peso de una unidad
+        elif unit_clean in ["sobre", "pieza", "pizza", "ud", "unidad"]:
+            total_qty = unit_weight
+            canonical_price = price / total_qty if total_qty > 0 else price
+        else:
+            total_qty = count * unit_weight
+            canonical_price = price / total_qty if total_qty > 0 else price
+
+        return {
+            "canonical_unit": canonical_unit,
+            "canonical_quantity": round(total_qty, 3),
+            "canonical_price": round(canonical_price, 2)
+        }
+
+    # 4. Formato simple: '5kg', '500g', '2.5L', '750ml'
+    single_match = re.search(r'([\d.,]+)\s*(k?g|m?l|l)\b', fmt or unit_clean)
+    if single_match:
+        qty = float(single_match.group(1).replace(',', '.'))
+        measure_unit = single_match.group(2).lower()
+        if measure_unit in ["g", "gr"]:
+            qty /= 1000.0
+            measure_unit = "kg"
+        elif measure_unit == "ml":
+            qty /= 1000.0
+            measure_unit = "l"
+
+        canonical_unit = "kg" if measure_unit == "kg" else "L" if measure_unit == "l" else "ud"
+        canonical_price = price / qty if qty > 0 else price
+        return {
+            "canonical_unit": canonical_unit,
+            "canonical_quantity": round(qty, 3),
+            "canonical_price": round(canonical_price, 2)
+        }
+
+    # 5. Formato por docenas o unidades discretas
+    if "docena" in unit_clean or "docena" in fmt:
+        return {
+            "canonical_unit": "ud",
+            "canonical_quantity": 12.0,
+            "canonical_price": round(price / 12.0, 2)
+        }
+
+    # Por defecto: unidad discreta (ud)
+    return {
+        "canonical_unit": "ud",
+        "canonical_quantity": 1.0,
+        "canonical_price": round(price, 2)
+    }
+
+
 def resolve_entities(
     raw_products: List[Dict[str, Any]],
     master_ingredients: List[Dict[str, Any]],
@@ -122,6 +227,12 @@ def resolve_entities(
     if not master_ingredients:
         for p in raw_products:
             p["clean_name"] = clean_product_text(p.get("raw_name", ""))
+            metric_info = normalize_metric_dimension(
+                price=p.get("price", 0.0),
+                unit=p.get("unit", ""),
+                format_str=p.get("format", "")
+            )
+            p.update(metric_info)
             p["master_ingredient_id"] = None
             p["similarity_score"] = 0.0
         return raw_products
@@ -145,6 +256,14 @@ def resolve_entities(
         raw_name = prod.get("raw_name", "")
         c_name = clean_product_text(raw_name)
         prod["clean_name"] = c_name
+        
+        # Normalización métrica y dimensional del formato y precio unitario
+        metric_info = normalize_metric_dimension(
+            price=prod.get("price", 0.0),
+            unit=prod.get("unit", ""),
+            format_str=prod.get("format", "")
+        )
+        prod.update(metric_info)
         
         prod_struct = parse_product_structure(raw_name)
 
@@ -217,6 +336,11 @@ class OntologicalEntityResolver:
     def parse_product_structure(text: str) -> Dict[str, Any]:
         """Descompone el producto en corte principal/raíz y accesorios secundarios."""
         return parse_product_structure(text)
+
+    @staticmethod
+    def normalize_metric_dimension(price: float, unit: str, format_str: str = "") -> Dict[str, Any]:
+        """Normaliza formatos y calcula el precio por unidad canónica (kg, L, ud)."""
+        return normalize_metric_dimension(price, unit, format_str)
 
     @staticmethod
     def resolve_entities(

@@ -41,7 +41,7 @@ def load_raw_products(
                         "id": master_id,
                         "name": raw_name.title(),
                         "category": "Catálogo Proveedores",
-                        "standard_unit": prod.get("unit", "ud"),
+                        "standard_unit": prod.get("canonical_unit") or prod.get("unit", "ud"),
                         "description": f"Ingrediente registrado dinámicamente desde el catálogo de {supplier_name}"
                     }
                 },
@@ -56,6 +56,10 @@ def load_raw_products(
             "clean_name": clean_name,
             "price": float(prod.get("price", 0.0)),
             "unit": prod.get("unit", "ud"),
+            "format": prod.get("format"),
+            "canonical_unit": prod.get("canonical_unit", prod.get("unit", "ud")),
+            "canonical_quantity": prod.get("canonical_quantity", 1.0),
+            "canonical_price": prod.get("canonical_price", float(prod.get("price", 0.0))),
             "master_ingredient_id": master_id,
             "similarity_score": prod.get("similarity_score", 100.0) if prod.get("master_ingredient_id") else 100.0,
             "stock_available": True,
