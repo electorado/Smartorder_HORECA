@@ -5,8 +5,9 @@ from pydantic import BaseModel, Field
 class Supplier(BaseModel):
     id: str = Field(..., description="ID único del proveedor (ej. prov_paco_01)")
     name: str = Field(..., description="Nombre comercial del proveedor")
-    email: str = Field(..., description="Email para recepción de pedidos")
-    phone: Optional[str] = Field(None, description="Teléfono de contacto")
+    email: Optional[str] = Field("pedidos@proveedor.com", description="Email para recepción de pedidos")
+    phone: Optional[str] = Field(None, description="Teléfono de contacto / WhatsApp")
+    preferred_channel: Optional[str] = Field("whatsapp", description="Canal preferido: whatsapp o email")
     delivery_days: List[str] = Field(default_factory=list, description="Días de entrega habituales")
     minimum_order_euro: float = Field(0.0, description="Pedido mínimo en Euros")
     active: bool = Field(True, description="Estado del proveedor")
@@ -24,6 +25,10 @@ class RawProduct(BaseModel):
     clean_name: str
     price: float
     unit: str
+    format: Optional[str] = None
+    canonical_unit: Optional[str] = "ud"
+    canonical_quantity: Optional[float] = 1.0
+    canonical_price: Optional[float] = None
     stock_available: bool = True
     extracted_at: datetime = Field(default_factory=datetime.utcnow)
     master_ingredient_id: Optional[str] = None
@@ -65,9 +70,13 @@ class OrderItem(BaseModel):
 class SupplierSubOrder(BaseModel):
     supplier_id: str
     supplier_name: str
-    supplier_email: str
+    supplier_email: Optional[str] = "pedidos@proveedor.com"
+    supplier_phone: Optional[str] = None
+    preferred_channel: Optional[str] = "whatsapp"
     items: List[OrderItem]
     subtotal: float
+    whatsapp_url: Optional[str] = None
+    whatsapp_text: Optional[str] = None
 
     def recalculate_subtotal(self) -> float:
         """Recalcula la suma de subtotales de las líneas del subpedido."""

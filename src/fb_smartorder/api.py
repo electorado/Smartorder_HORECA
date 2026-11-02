@@ -3,12 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import tempfile
 import os
+import re
+import urllib.parse
 from datetime import datetime
 from bson import ObjectId
 
 from .database import get_database, init_db, get_db_client
 from .models import Order, OrderItem, SupplierSubOrder, Supplier
-from .extract import extract_excel, extract_pdf
+from .extract import extract_excel, extract_pdf, extract_catalog
 from .transform import resolve_entities
 from .load import load_raw_products, save_catalog_file
 
@@ -61,6 +63,30 @@ def get_suppliers():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/v1/suppliers")
+def create_or_update_supplier(supplier: Supplier):
+    """Crea o actualiza un proveedor (ej. importado de la agenda telefónica del cocinero)."""
+    try:
+        db = get_database()
+        supp_dict = supplier.model_dump()
+        
+        # Si no tiene ID o es provisional, generar uno seguro
+        if not supp_dict.get("id"):
+            clean_id = re.sub(r'[^a-zA-Z0-9]', '_', supp_dict["name"].lower().strip())
+            supp_dict["id"] = f"prov_{clean_id}"
+
+        db["proveedores"].update_one(
+            {"id": supp_dict["id"]},
+            {"$set": supp_dict},
+            upsert=True
+        )
+        return {
+            "message": f"Proveedor '{supp_dict['name']}' guardado correctamente.",
+            "supplier": supp_dict
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error guardando proveedor: {str(e)}")
+
 @app.get("/api/v1/ingredients")
 def get_ingredients(query: Optional[str] = None):
     """Devuelve el catálogo de ingredientes maestros enriquecido con las mejores ofertas de proveedores."""
@@ -81,8 +107,8 @@ def get_ingredients(query: Optional[str] = None):
             m_id = master["id"]
             offers = list(db["productos_brutos"].find({"master_ingredient_id": m_id}, {"_id": 0}))
             
-            # Ordenar ofertas por precio ascendente
-            offers.sort(key=lambda x: x.get("price", 999999.0))
+            # Ordenar ofertas por precio canónico comparable (ej. €/kg, €/L)
+            offers.sort(key=lambda x: x.get("canonical_price") or x.get("price", 999999.0))
             best_offer = offers[0] if offers else None
 
             master["best_offer"] = best_offer
@@ -118,15 +144,15 @@ def get_products(
                 offer_query["supplier_id"] = supplier_id
 
             offers = list(db["productos_brutos"].find(offer_query, {"_id": 0}))
-            offers.sort(key=lambda x: x.get("price", 999999.0))
+            offers.sort(key=lambda x: x.get("canonical_price") or x.get("price", 999999.0))
             best_offer = offers[0] if offers else None
 
             products.append({
                 "id": m["id"],
                 "name": m["name"],
                 "category": m.get("category", "General"),
-                "standard_unit": m.get("standard_unit", "kg"),
-                "best_price": best_offer.get("price") if best_offer else None,
+                "standard_unit": (best_offer.get("canonical_unit") if best_offer else None) or m.get("standard_unit", "kg"),
+                "best_price": (best_offer.get("canonical_price") if best_offer and best_offer.get("canonical_price") is not None else (best_offer.get("price") if best_offer else None)),
                 "best_supplier_id": best_offer.get("supplier_id") if best_offer else None,
                 "best_supplier_name": best_offer.get("supplier_name") if best_offer else None,
                 "available_offers": len(offers)
@@ -146,9 +172,21 @@ async def upload_catalog(
         db = get_database()
         supplier = db["proveedores"].find_one({"id": supplier_id})
         if not supplier:
-            raise HTTPException(status_code=404, detail=f"Proveedor '{supplier_id}' no encontrado.")
-
-        supplier_name = supplier.get("name", supplier_id)
+            # Si el proveedor fue introducido manualmente y aún no existía en BD, crearlo
+            supplier_name = supplier_id.replace("prov_", "").replace("_", " ").title()
+            supplier = {
+                "id": supplier_id,
+                "name": supplier_name,
+                "email": f"pedidos@{supplier_id}.com",
+                "phone": None,
+                "preferred_channel": "whatsapp",
+                "delivery_days": ["Lunes", "Miércoles", "Viernes"],
+                "minimum_order_euro": 0.0,
+                "active": True
+            }
+            db["proveedores"].insert_one(supplier)
+        else:
+            supplier_name = supplier.get("name", supplier_id)
 
         file_bytes = await file.read()
         filename = file.filename or "catalogo"
@@ -163,11 +201,9 @@ async def upload_catalog(
             tmp_path = tmp.name
 
         try:
-            # 3. Fase de Extracción
-            if ext in [".xlsx", ".xls"]:
-                raw_extracted = extract_excel(tmp_path)
-            elif ext == ".pdf":
-                raw_extracted = extract_pdf(tmp_path, save_output=False)
+            # 3. Fase de Extracción universal mediante Factoría
+            if ext in [".xlsx", ".xls", ".pdf"]:
+                raw_extracted = extract_catalog(tmp_path, provider_id=supplier_id)
             else:
                 raise HTTPException(status_code=400, detail="Formato no soportado. Debe ser .pdf, .xlsx o .xls.")
         finally:
@@ -197,7 +233,7 @@ async def upload_catalog(
 
 @app.post("/api/v1/orders")
 def create_order(order_data: Order):
-    """Crea y consolida un nuevo pedido en el sistema, dividiéndolo automáticamente por proveedores."""
+    """Crea y consolida un nuevo pedido en el sistema, dividiéndolo automáticamente por proveedores y generando mensajes WhatsApp."""
     try:
         db = get_database()
 
@@ -209,23 +245,62 @@ def create_order(order_data: Order):
                 supp = db["proveedores"].find_one({"id": s_id})
                 s_name = item.supplier_name or (supp.get("name") if supp else s_id)
                 s_email = supp.get("email", "pedidos@proveedor.com") if supp else "pedidos@proveedor.com"
+                s_phone = supp.get("phone") if supp else None
+                s_pref = supp.get("preferred_channel", "whatsapp") if supp else "whatsapp"
                 grouped[s_id] = {
                     "supplier_id": s_id,
                     "supplier_name": s_name,
                     "supplier_email": s_email,
+                    "supplier_phone": s_phone,
+                    "preferred_channel": s_pref,
                     "items": [],
                     "subtotal": 0.0
                 }
             grouped[s_id]["items"].append(item)
             grouped[s_id]["subtotal"] += item.total_price
 
-        suborders = [SupplierSubOrder(**v) for v in grouped.values()]
+        # Generar texto y enlaces para WhatsApp por cada proveedor
+        suborders = []
+        for v in grouped.values():
+            s_name = v["supplier_name"]
+            items_lines = []
+            for it in v["items"]:
+                line_str = f"• {it.quantity} {it.unit} {it.ingredient_name}"
+                if it.is_off_catalog:
+                    line_str += " *(Adicional / Fuera de catálogo)*"
+                if it.notes:
+                    line_str += f" [Nota: {it.notes}]"
+                items_lines.append(line_str)
+
+            items_block = "\n".join(items_lines)
+            chef_note_block = f"\n\n*Notas del Cocinero:*\n{order_data.chef_notes}" if order_data.chef_notes else ""
+
+            wa_text = (
+                f"*PEDIDO HOSTELERÍA - F&B SMARTORDER*\n"
+                f"*Proveedor:* {s_name}\n"
+                f"*Fecha:* {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\n"
+                f"*Líneas del pedido:*\n"
+                f"{items_block}"
+                f"{chef_note_block}\n\n"
+                f"*Subtotal estimado:* {round(v['subtotal'], 2):.2f} €"
+            )
+
+            v["whatsapp_text"] = wa_text
+            phone_raw = v.get("supplier_phone") or ""
+            phone_clean = re.sub(r"[^\d+]", "", phone_raw).replace("+", "")
+            if phone_clean:
+                v["whatsapp_url"] = f"https://api.whatsapp.com/send?phone={phone_clean}&text={urllib.parse.quote(wa_text)}"
+            else:
+                v["whatsapp_url"] = f"https://api.whatsapp.com/send?text={urllib.parse.quote(wa_text)}"
+
+            suborders.append(SupplierSubOrder(**v))
+
         order_data.supplier_suborders = suborders
         order_data.total_amount = sum(so.subtotal for so in suborders)
         order_data.created_at = datetime.utcnow()
         order_data.status = "pending"
 
-        order_dict = order_data.dict()
+        order_dict = order_data.model_dump() if hasattr(order_data, "model_dump") else order_data.dict()
         res = db["pedidos"].insert_one(order_dict)
         order_id = str(res.inserted_id)
         order_dict["id"] = order_id
@@ -332,4 +407,9 @@ async def scan_fridge_photo(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar foto de la nevera: {str(e)}")
+
+@app.post("/api/v1/scan-kitchen-notes")
+async def scan_kitchen_notes(file: UploadFile = File(...)):
+    """Alias para escanear notas manuscritas o listas de cocina."""
+    return await scan_fridge_photo(file)
 

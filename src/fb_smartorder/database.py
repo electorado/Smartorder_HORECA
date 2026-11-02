@@ -6,7 +6,11 @@ import gridfs
 load_dotenv()
 
 def get_db_client():
-    """Inicializa y devuelve el cliente utilizando variables de entorno o valores por defecto seguros."""
+    """Inicializa y devuelve el cliente utilizando MONGO_URI (Atlas) o variables locales (Docker)."""
+    mongo_uri = os.getenv("MONGO_URI")
+    if mongo_uri:
+        return MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+
     user = os.getenv("MONGO_ROOT_USER", "admin")
     password = os.getenv("MONGO_ROOT_PASSWORD", "supplypassword")
     host = os.getenv("MONGO_HOST", "localhost")
@@ -18,6 +22,12 @@ def get_db_client():
 def get_database(db_name="fb_smartorder"):
     """Devuelve la instancia de la base de datos específica del proyecto."""
     client = get_db_client()
+    try:
+        default_db = client.get_default_database()
+        if default_db is not None:
+            return default_db
+    except Exception:
+        pass
     return client[db_name]
 
 def get_gridfs(db_name="fb_smartorder"):
@@ -45,7 +55,8 @@ def init_db(db_name="fb_smartorder"):
                     "id": "prov_paco_01",
                     "name": "Frutas Paco S.L.",
                     "email": "pedidos@frutaspaco.es",
-                    "phone": "+34 600 111 222",
+                    "phone": "+34600111222",
+                    "preferred_channel": "whatsapp",
                     "delivery_days": ["Lunes", "Miércoles", "Viernes"],
                     "minimum_order_euro": 50.0,
                     "active": True
@@ -54,7 +65,8 @@ def init_db(db_name="fb_smartorder"):
                     "id": "prov_carnes_gomez_02",
                     "name": "Carnes Gómez & Hijos",
                     "email": "ventas@carnesgomez.com",
-                    "phone": "+34 611 333 444",
+                    "phone": "+34611333444",
+                    "preferred_channel": "whatsapp",
                     "delivery_days": ["Martes", "Jueves", "Sábado"],
                     "minimum_order_euro": 100.0,
                     "active": True
@@ -63,7 +75,8 @@ def init_db(db_name="fb_smartorder"):
                     "id": "prov_mariscos_sur_03",
                     "name": "Mariscos del Sur",
                     "email": "pedidos@mariscosdelsur.es",
-                    "phone": "+34 622 555 666",
+                    "phone": "+34622555666",
+                    "preferred_channel": "whatsapp",
                     "delivery_days": ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"],
                     "minimum_order_euro": 80.0,
                     "active": True
@@ -72,7 +85,8 @@ def init_db(db_name="fb_smartorder"):
                     "id": "prov_dialva_04",
                     "name": "DIALVA Hostelería S.L.",
                     "email": "pedidos@dialva.es",
-                    "phone": "+34 900 888 999",
+                    "phone": "+34900888999",
+                    "preferred_channel": "whatsapp",
                     "delivery_days": ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"],
                     "minimum_order_euro": 60.0,
                     "active": True

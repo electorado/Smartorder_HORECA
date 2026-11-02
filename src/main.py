@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from fb_smartorder.database import get_db_client, get_database, init_db, get_gridfs
-from fb_smartorder.extract import extract_excel
+from fb_smartorder.extract import extract_catalog
 from fb_smartorder.transform import clean_product_text, resolve_entities
 from fb_smartorder.load import load_raw_products, save_catalog_file
 
@@ -50,11 +50,7 @@ def run_pipeline():
         print(f"\n--------------------------------------------------")
         print(f"📄 Procesando Catálogo: {archivo_path.name} (Proveedor: {provider_id})")
         
-        if item["type"] == "excel":
-            datos_brutos = extract_excel(archivo_path)
-        else:
-            from fb_smartorder.extract import extract_pdf
-            datos_brutos = extract_pdf(archivo_path)
+        datos_brutos = extract_catalog(archivo_path, provider_id=provider_id)
 
         print(f"📥 Extraídos {len(datos_brutos)} ítems del documento.")
 
