@@ -72,6 +72,15 @@ data class OrderDetailResponse(
     @SerializedName("id")
     val id: String?,
 
+    @SerializedName("status")
+    val status: String? = "pending",
+
+    @SerializedName("created_at")
+    val createdAt: String? = null,
+
+    @SerializedName("items")
+    val items: List<OrderItem>? = emptyList(),
+
     @SerializedName("supplier_suborders")
     val supplierSuborders: List<SupplierSubOrderResponse>? = emptyList(),
 

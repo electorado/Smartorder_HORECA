@@ -85,4 +85,33 @@ class ProductRepository(
             Result.failure(e)
         }
     }
+
+    suspend fun getOrdersHistory(): Result<List<OrderDetailResponse>> {
+        return try {
+            val response = api.getOrdersHistory()
+            if (response.isSuccessful) {
+                Result.success(response.body()?.orders ?: emptyList())
+            } else {
+                Result.failure(Exception("HTTP ${response.code()}: ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun scanKitchenNotes(file: File): Result<ScanResponse> {
+        return try {
+            val reqFile = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
+            val body = MultipartBody.Part.createFormData("file", file.name, reqFile)
+            val response = api.scanKitchenNotes(body)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val errBody = response.errorBody()?.string() ?: response.message()
+                Result.failure(Exception("Error procesando foto: $errBody"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

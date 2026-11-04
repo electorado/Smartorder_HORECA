@@ -88,4 +88,21 @@ class ProductViewModel(
             onResult(result.getOrDefault(emptyList()))
         }
     }
+
+    fun getOrdersHistory(onResult: (List<OrderDetailResponse>) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.getOrdersHistory()
+            onResult(result.getOrDefault(emptyList()))
+        }
+    }
+
+    fun scanKitchenNotes(
+        file: File,
+        onResult: (Result<ScanResponse>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.scanKitchenNotes(file)
+            onResult(result)
+        }
+    }
 }

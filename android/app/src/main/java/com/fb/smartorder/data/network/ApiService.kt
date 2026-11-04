@@ -19,6 +19,9 @@ interface ApiService {
         @Body order: OrderRequest
     ): Response<OrderResponse>
 
+    @GET("api/v1/orders")
+    suspend fun getOrdersHistory(): Response<OrdersHistoryResponse>
+
     @GET("api/v1/suppliers")
     suspend fun getSuppliers(): Response<SuppliersResponse>
 
@@ -33,4 +36,10 @@ interface ApiService {
         @Part("supplier_id") supplierId: RequestBody,
         @Part file: MultipartBody.Part
     ): Response<CatalogUploadResponse>
+
+    @Multipart
+    @POST("api/v1/scan-kitchen-notes")
+    suspend fun scanKitchenNotes(
+        @Part file: MultipartBody.Part
+    ): Response<ScanResponse>
 }

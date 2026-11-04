@@ -51,6 +51,21 @@ class ProductAdapter(
         return result
     }
 
+    fun setProductQuantity(productId: String, quantity: Int) {
+        if (quantity > 0) {
+            quantities[productId] = quantity
+            selectedIds.add(productId)
+        } else {
+            quantities.remove(productId)
+            selectedIds.remove(productId)
+        }
+        notifyDataSetChanged()
+    }
+
+    fun getProductById(id: String): Product? {
+        return fullList.find { it.id == id }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ProductViewHolder {
         val binding = ItemIngredientBinding.inflate(
             LayoutInflater.from(parent.context),

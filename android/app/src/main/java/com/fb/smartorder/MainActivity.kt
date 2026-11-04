@@ -51,6 +51,20 @@ class MainActivity : AppCompatActivity() {
         uri?.let { handlePdfPicked(it) }
     }
 
+    // Selector de fotos de la nevera (Galería)
+    private val galleryImageLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { handleFridgePhotoPicked(it) }
+    }
+
+    // Captura de foto con cámara
+    private val cameraLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: android.graphics.Bitmap? ->
+        bitmap?.let { handleCameraBitmap(it) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -61,6 +75,10 @@ class MainActivity : AppCompatActivity() {
         setupQuickActionButtons()
         setupBottomButton()
         observeViewModel()
+
+        if (intent.getBooleanExtra("EXTRA_START_SCAN", false)) {
+            showCameraOptionsDialog()
+        }
     }
 
     private fun setupRecyclerView() {
@@ -92,8 +110,112 @@ class MainActivity : AppCompatActivity() {
             showNotesAndAdditionalsDialog()
         }
 
+        binding.btnCameraScan.setOnClickListener {
+            showCameraOptionsDialog()
+        }
+
         binding.btnUploadCatalog.setOnClickListener {
             showUploadCatalogDialog()
+        }
+    }
+
+    private fun showCameraOptionsDialog() {
+        val options = arrayOf("Hacer foto con la cámara 📷", "Elegir foto de la galería 🖼️")
+        AlertDialog.Builder(this)
+            .setTitle("Escanear lista de la nevera / pizarra")
+            .setItems(options) { _, which ->
+                if (which == 0) {
+                    cameraLauncher.launch(null)
+                } else {
+                    galleryImageLauncher.launch("image/*")
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun handleCameraBitmap(bitmap: android.graphics.Bitmap) {
+        val tempFile = File(cacheDir, "temp_fridge_camera.jpg")
+        FileOutputStream(tempFile).use { out ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+        }
+        processFridgePhotoFile(tempFile)
+    }
+
+    private fun handleFridgePhotoPicked(uri: Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val tempFile = File(cacheDir, "temp_fridge_gallery.jpg")
+            FileOutputStream(tempFile).use { out ->
+                inputStream?.copyTo(out)
+            }
+            processFridgePhotoFile(tempFile)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error leyendo imagen: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun processFridgePhotoFile(file: File) {
+        binding.pbLoading.visibility = View.VISIBLE
+        Toast.makeText(this, "Analizando lista con IA (Gemini 1.5 Flash)...", Toast.LENGTH_LONG).show()
+
+        viewModel.scanKitchenNotes(file) { result ->
+            binding.pbLoading.visibility = View.GONE
+            result.onSuccess { scanResp ->
+                val items = scanResp.items
+                if (items.isEmpty()) {
+                    Toast.makeText(this, "No se detectaron ingredientes en la imagen", Toast.LENGTH_LONG).show()
+                    return@onSuccess
+                }
+
+                var matchedCount = 0
+                val addedOffCatalog = mutableListOf<String>()
+
+                for (item in items) {
+                    val mId = item.masterIngredientId
+                    if (!mId.isNullOrEmpty() && adapter.getProductById(mId) != null) {
+                        adapter.setProductQuantity(mId, item.quantity.toInt().coerceAtLeast(1))
+                        matchedCount++
+                    } else {
+                        val offName = item.cleanName ?: item.rawText
+                        viewModel.offCatalogItems.add(
+                            OrderItem(
+                                masterIngredientId = null,
+                                ingredientName = offName,
+                                supplierId = "prov_dialva_04",
+                                supplierName = "Proveedor Asignado",
+                                quantity = item.quantity,
+                                unit = item.unit,
+                                unitPrice = 0.0,
+                                totalPrice = 0.0,
+                                notes = "Extraído de foto de la nevera",
+                                isOffCatalog = true
+                            )
+                        )
+                        addedOffCatalog.add(offName)
+                    }
+                }
+
+                updateOrderSummary()
+
+                val summaryMsg = StringBuilder()
+                summaryMsg.append("Se detectaron ${items.size} ítems en la foto:\n")
+                if (matchedCount > 0) {
+                    summaryMsg.append("• $matchedCount productos marcados en el catálogo.\n")
+                }
+                if (addedOffCatalog.isNotEmpty()) {
+                    summaryMsg.append("• ${addedOffCatalog.size} ítems añadidos como notas fuera de catálogo.\n")
+                }
+
+                AlertDialog.Builder(this)
+                    .setTitle("Reconocimiento completado")
+                    .setMessage(summaryMsg.toString())
+                    .setPositiveButton("Aceptar", null)
+                    .show()
+
+            }.onFailure { err ->
+                Toast.makeText(this, "Error procesando foto: ${err.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
