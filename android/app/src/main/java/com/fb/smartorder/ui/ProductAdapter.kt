@@ -15,28 +15,69 @@ class ProductAdapter(
     private val displayedList = mutableListOf<Product>()
     private val quantities = mutableMapOf<String, Int>()
     private val selectedIds = mutableSetOf<String>()
+    var showOnlySelected: Boolean = false
+    private var currentQuery: String = ""
 
     fun setProducts(products: List<Product>) {
         fullList.clear()
         fullList.addAll(products)
-        displayedList.clear()
-        displayedList.addAll(products)
-        notifyDataSetChanged()
+        applyFilters()
+    }
+
+    fun addCustomProduct(product: Product, quantity: Int) {
+        if (fullList.none { it.id == product.id }) {
+            fullList.add(0, product)
+        }
+        setProductQuantity(product.id, quantity)
     }
 
     fun filter(query: String) {
-        val cleanQuery = query.trim().lowercase()
+        currentQuery = query
+        applyFilters()
+    }
+
+    fun setOnlySelectedFilter(onlySelected: Boolean) {
+        showOnlySelected = onlySelected
+        applyFilters()
+    }
+
+    private fun normalize(text: String): String {
+        return java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+            .lowercase()
+            .trim()
+    }
+
+    private fun applyFilters() {
+        val cleanQuery = normalize(currentQuery)
+        val queryWords = cleanQuery.split("\\s+".toRegex()).filter { it.isNotEmpty() }
+
         displayedList.clear()
-        if (cleanQuery.isEmpty()) {
-            displayedList.addAll(fullList)
-        } else {
-            displayedList.addAll(
-                fullList.filter {
-                    it.name.lowercase().contains(cleanQuery) ||
-                            it.category.lowercase().contains(cleanQuery)
+        displayedList.addAll(
+            fullList.filter { prod ->
+                // Las notas, observaciones e ítems ad-hoc fuera de catálogo NO deben mostrarse en el catálogo oficial
+                if (!showOnlySelected && prod.id.startsWith("custom_")) {
+                    return@filter false
                 }
-            )
-        }
+
+                val normName = normalize(prod.name)
+                val normCategory = normalize(prod.category)
+                val normSupplier = normalize(prod.bestSupplierName.orEmpty())
+
+                val matchesQuery = if (queryWords.isEmpty()) {
+                    true
+                } else {
+                    queryWords.all { word ->
+                        normName.contains(word) ||
+                        normCategory.contains(word) ||
+                        normSupplier.contains(word)
+                    }
+                }
+
+                val matchesSelection = !showOnlySelected || ((quantities[prod.id] ?: 0) > 0 && selectedIds.contains(prod.id))
+                matchesQuery && matchesSelection
+            }
+        )
         notifyDataSetChanged()
     }
 
@@ -44,8 +85,19 @@ class ProductAdapter(
         val result = mutableMapOf<Product, Int>()
         for (prod in fullList) {
             val qty = quantities[prod.id] ?: 0
-            if (qty > 0 && selectedIds.contains(prod.id)) {
+            if (qty > 0) {
                 result[prod] = qty
+            }
+        }
+        return result
+    }
+
+    fun getOrderLines(): List<OrderLine> {
+        val result = mutableListOf<OrderLine>()
+        for (prod in fullList) {
+            val qty = quantities[prod.id] ?: 0
+            if (qty > 0) {
+                result.add(OrderLine(prod, qty))
             }
         }
         return result
@@ -58,8 +110,18 @@ class ProductAdapter(
         } else {
             quantities.remove(productId)
             selectedIds.remove(productId)
+            if (productId.startsWith("custom_")) {
+                fullList.removeAll { it.id == productId }
+            }
         }
-        notifyDataSetChanged()
+        applyFilters()
+    }
+
+    fun clearOrder() {
+        quantities.clear()
+        selectedIds.clear()
+        fullList.removeAll { it.id.startsWith("custom_") }
+        applyFilters()
     }
 
     fun getProductById(id: String): Product? {
@@ -102,8 +164,10 @@ class ProductAdapter(
             // Badge de oferta / urgente si tiene más de 1 proveedor o precio ventajoso
             binding.tvUrgentBadge.visibility = if (product.availableOffers > 1) View.VISIBLE else View.GONE
 
-            binding.tvQuantity.text = qty.toString()
+            // Desvincular listener antes de asignar estado para evitar disparos accidentales en reciclado
+            binding.cbSelected.setOnCheckedChangeListener(null)
             binding.cbSelected.isChecked = isChecked
+            binding.tvQuantity.text = qty.toString()
 
             // Eventos de usuario
             binding.btnPlus.setOnClickListener {
@@ -119,8 +183,10 @@ class ProductAdapter(
                 val current = quantities[product.id] ?: 0
                 if (current > 0) {
                     val newQty = current - 1
-                    quantities[product.id] = newQty
-                    if (newQty == 0) {
+                    if (newQty > 0) {
+                        quantities[product.id] = newQty
+                    } else {
+                        quantities.remove(product.id)
                         selectedIds.remove(product.id)
                         binding.cbSelected.isChecked = false
                     }
@@ -129,19 +195,21 @@ class ProductAdapter(
                 }
             }
 
-            binding.cbSelected.setOnCheckedChangeListener { _, checked ->
+            binding.cbSelected.setOnClickListener {
+                val checked = binding.cbSelected.isChecked
                 if (checked) {
                     selectedIds.add(product.id)
-                    if ((quantities[product.id] ?: 0) == 0) {
-                        quantities[product.id] = 1
-                        binding.tvQuantity.text = "1"
-                    }
+                    val current = quantities[product.id] ?: 0
+                    val newQty = if (current > 0) current else 1
+                    quantities[product.id] = newQty
+                    binding.tvQuantity.text = newQty.toString()
+                    onQuantityChanged?.invoke(product, newQty)
                 } else {
                     selectedIds.remove(product.id)
-                    quantities[product.id] = 0
+                    quantities.remove(product.id)
                     binding.tvQuantity.text = "0"
+                    onQuantityChanged?.invoke(product, 0)
                 }
-                onQuantityChanged?.invoke(product, quantities[product.id] ?: 0)
             }
         }
     }
