@@ -7,7 +7,8 @@ import com.fb.smartorder.databinding.ItemSupplierBinding
 import com.fb.smartorder.model.Supplier
 
 class SuppliersAdapter(
-    private val onSupplierClick: ((Supplier) -> Unit)? = null
+    private val onSupplierClick: ((Supplier) -> Unit)? = null,
+    private val onSupplierLongClick: ((Supplier) -> Unit)? = null
 ) : RecyclerView.Adapter<SuppliersAdapter.SupplierViewHolder>() {
 
     private val suppliersList = mutableListOf<Supplier>()
@@ -39,12 +40,25 @@ class SuppliersAdapter(
 
         fun bind(supplier: Supplier) {
             binding.tvSupplierItemName.text = supplier.name
-            binding.tvSupplierChannelBadge.text = (supplier.preferredChannel ?: "whatsapp").uppercase()
+            val isEmail = supplier.preferredChannel?.lowercase() == "email"
+            if (isEmail) {
+                binding.tvSupplierChannelBadge.setBackgroundResource(com.fb.smartorder.R.drawable.bg_badge_email)
+                binding.tvSupplierChannelBadge.setTextColor(android.graphics.Color.parseColor("#1565C0"))
+                binding.tvSupplierChannelBadge.text = "EMAIL ✉️"
+            } else {
+                binding.tvSupplierChannelBadge.setBackgroundResource(com.fb.smartorder.R.drawable.bg_badge_whatsapp)
+                binding.tvSupplierChannelBadge.setTextColor(android.graphics.Color.parseColor("#2E7D32"))
+                binding.tvSupplierChannelBadge.text = "WHATSAPP 📲"
+            }
             binding.tvSupplierItemPhone.text = "Teléfono: ${supplier.phone ?: "No configurado"}"
             binding.tvSupplierItemEmail.text = "Email: ${supplier.email ?: "pedidos@proveedor.com"}"
 
             binding.root.setOnClickListener {
                 onSupplierClick?.invoke(supplier)
+            }
+            binding.root.setOnLongClickListener {
+                onSupplierLongClick?.invoke(supplier)
+                true
             }
         }
     }

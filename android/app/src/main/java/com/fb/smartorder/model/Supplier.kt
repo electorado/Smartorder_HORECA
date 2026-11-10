@@ -38,6 +38,15 @@ data class CatalogUploadResponse(
     val productsExtracted: Int = 0,
 
     @SerializedName("products_loaded")
-    val productsLoaded: Int = 0
+    val productsLoaded: Int = 0,
+
+    @SerializedName("is_new_supplier")
+    val isNewSupplier: Boolean? = false,
+
+    @SerializedName("detected_phone")
+    val detectedPhone: String? = null,
+
+    @SerializedName("detected_email")
+    val detectedEmail: String? = null
 )
 

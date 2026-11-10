@@ -61,10 +61,11 @@ class ProductViewModel(
     fun uploadCatalog(
         supplierId: String,
         file: File,
+        isAnnex: Boolean = false,
         onResult: (Result<CatalogUploadResponse>) -> Unit
     ) {
         viewModelScope.launch {
-            val result = repository.uploadCatalog(supplierId, file)
+            val result = repository.uploadCatalog(supplierId, file, isAnnex)
             if (result.isSuccess) {
                 loadProducts()
             }
@@ -78,6 +79,19 @@ class ProductViewModel(
     ) {
         viewModelScope.launch {
             val result = repository.saveSupplier(supplier)
+            onResult(result)
+        }
+    }
+
+    fun deleteSupplier(
+        supplierId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.deleteSupplier(supplierId)
+            if (result.isSuccess) {
+                loadProducts()
+            }
             onResult(result)
         }
     }

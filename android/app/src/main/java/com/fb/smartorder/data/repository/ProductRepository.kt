@@ -68,13 +68,28 @@ class ProductRepository(
         }
     }
 
-    suspend fun uploadCatalog(supplierId: String, file: File): Result<CatalogUploadResponse> {
+    suspend fun deleteSupplier(supplierId: String): Result<Unit> {
+        return try {
+            val response = api.deleteSupplier(supplierId)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val err = response.errorBody()?.string() ?: response.message()
+                Result.failure(Exception("Error eliminando proveedor: $err"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun uploadCatalog(supplierId: String, file: File, isAnnex: Boolean = false): Result<CatalogUploadResponse> {
         return try {
             val suppBody = supplierId.toRequestBody("text/plain".toMediaTypeOrNull())
+            val annexBody = (if (isAnnex) "true" else "false").toRequestBody("text/plain".toMediaTypeOrNull())
             val fileReq = file.asRequestBody("application/pdf".toMediaTypeOrNull())
             val filePart = MultipartBody.Part.createFormData("file", file.name, fileReq)
 
-            val response = api.uploadCatalog(suppBody, filePart)
+            val response = api.uploadCatalog(suppBody, annexBody, filePart)
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {

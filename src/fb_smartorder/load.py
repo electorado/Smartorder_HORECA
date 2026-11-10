@@ -6,15 +6,24 @@ from .database import get_database, get_gridfs
 def load_raw_products(
     provider_id: str,
     products: List[Dict[str, Any]],
-    supplier_name: Optional[str] = None
+    supplier_name: Optional[str] = None,
+    is_annex: bool = False
 ) -> int:
-    """Carga o actualiza los productos procesados en la colección de MongoDB."""
+    """Carga o actualiza los productos procesados en la colección de MongoDB.
+    Si is_annex es False (modo sustitución por defecto), purga los productos anteriores
+    del proveedor para que no queden ítems descatalogados o que ya no se pueden pedir.
+    Si is_annex es True (modo anexo), mantiene el catálogo base y solo añade/actualiza."""
     if not products:
         print("⚠️ No hay productos para cargar.")
         return 0
 
     db = get_database()
     collection = db["productos_brutos"]
+
+    # En modo sustitución, purgar productos antiguos del proveedor
+    if not is_annex:
+        deleted = collection.delete_many({"supplier_id": provider_id})
+        print(f"🗑️ Reemplazo de catálogo: eliminados {deleted.deleted_count} productos anteriores del proveedor {provider_id}.")
 
     # Obtener nombre del proveedor si no se indicó
     if not supplier_name:

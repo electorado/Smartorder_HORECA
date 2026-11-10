@@ -5,7 +5,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_paper"
-    android:padding="16dp"
     tools:context=".SuppliersActivity">
 
     <!-- Cabecera Vintage -->
@@ -13,6 +12,9 @@
         android:id="@+id/layoutSuppliersHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
         android:background="@drawable/bg_stamp_header"
         android:gravity="center"
         android:orientation="vertical"
@@ -39,19 +41,37 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- Botonera de Acciones -->
+    <!-- Botón Principal: Subir Catálogo Automático -->
+    <Button
+        android:id="@+id/btnUploadCatalogAutoDetect"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/bg_btn_retro"
+        android:fontFamily="sans-serif-condensed"
+        android:text="📄 + SUBIR CATÁLOGO (PDF)"
+        android:textColor="@color/white"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toBottomOf="@id/layoutSuppliersHeader" />
+
+    <!-- Botonera Secundaria de Acciones Manuales -->
     <LinearLayout
         android:id="@+id/layoutSupplierActions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="16dp"
         android:orientation="horizontal"
-        app:layout_constraintTop_toBottomOf="@id/layoutSuppliersHeader">
+        app:layout_constraintTop_toBottomOf="@id/btnUploadCatalogAutoDetect">
 
         <Button
             android:id="@+id/btnAddSupplier"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="40dp"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
             android:background="@drawable/bg_btn_secondary_retro"
@@ -64,7 +84,7 @@
         <Button
             android:id="@+id/btnImportContact"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="40dp"
             android:layout_marginStart="4dp"
             android:layout_weight="1"
             android:background="@drawable/bg_btn_secondary_retro"
@@ -80,10 +100,12 @@
         android:id="@+id/rvSuppliers"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:layout_marginStart="16dp"
         android:layout_marginTop="10dp"
+        android:layout_marginEnd="16dp"
         android:clipToPadding="false"
         android:paddingBottom="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/layoutBottomNav"
         app:layout_constraintTop_toBottomOf="@id/layoutSupplierActions"
         tools:listitem="@layout/item_supplier" />
 
@@ -94,10 +116,153 @@
         android:layout_height="wrap_content"
         android:indeterminateTint="@color/stamp_red"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/layoutBottomNav"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/layoutSupplierActions" />
+
+    <!-- Barra Inferior de Navegación -->
+    <LinearLayout
+        android:id="@+id/layoutBottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="@drawable/bg_bottom_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Tab: Comanda -->
+        <LinearLayout
+            android:id="@+id/navItemOrder"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavOrderIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_order" />
+
+            <TextView
+                android:id="@+id/tvNavOrderLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Comanda"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Tab: Catálogo -->
+        <LinearLayout
+            android:id="@+id/navItemCatalog"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavCatalogIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_catalog" />
+
+            <TextView
+                android:id="@+id/tvNavCatalogLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Catálogo"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Botón Central: Cámara -->
+        <LinearLayout
+            android:id="@+id/navItemCamera"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_camera_fab"
+                android:gravity="center">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_nav_camera" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- Tab: Historial -->
+        <LinearLayout
+            android:id="@+id/navItemHistory"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavHistoryIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_history" />
+
+            <TextView
+                android:id="@+id/tvNavHistoryLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Historial"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Tab: Proveedores (Activo) -->
+        <LinearLayout
+            android:id="@+id/navItemSuppliers"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavSuppliersIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_suppliers"
+                app:tint="@color/stamp_red" />
+
+            <TextView
+                android:id="@+id/tvNavSuppliersLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Proveedores"
+                android:textColor="@color/stamp_red"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
 
