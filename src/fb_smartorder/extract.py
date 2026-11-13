@@ -18,6 +18,9 @@ class BaseCatalogExtractor(ABC):
     del resto del pipeline ETL (transformación y carga).
     """
 
+    def __init__(self):
+        self.detected_supplier: Optional[Dict[str, Any]] = None
+
     @abstractmethod
     def extract(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
         """Extrae y normaliza los productos crudos a una lista de diccionarios.
@@ -133,10 +136,10 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
         anchor_regex: str = r'[C|c][:.]?\s*(\d{3,5})',
         ignored_section_headers: Optional[Set[str]] = None,
         noise_phrases: Optional[List[str]] = None,
-        x_tolerance: float = 130.0,
+        x_tolerance: float = 190.0,
         y_above: float = 75.0,
         y_below: float = 65.0,
-        header_y_limit: float = 720.0,
+        header_y_limit: float = 780.0,
         save_output: bool = False
     ):
         self.anchor_regex = anchor_regex
@@ -149,9 +152,10 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
         self.save_output = save_output
 
     def _clean_product_name(self, text: str) -> str:
-        text = re.sub(r'\(?\d+\s*uds?\s*[Xx]\s*[\d.,]+\s*k?g\)?', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\(?\d+\s*uds?\s*[Xx]\s*[\d.,\'’]+\s*k?g\)?', '', text, flags=re.IGNORECASE)
         text = re.sub(r'\b\d+\s*uds?\s*x\b.*', '', text, flags=re.IGNORECASE)
         text = re.sub(r'\(?c[.:]?\s*\d+\)?', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bC:\s*$', '', text, flags=re.IGNORECASE)
         text = re.sub(r'\b\d+[.,\'’]\d{1,2}\s*€(?:/\w+)?\b', '', text)
         text = re.sub(r'\b\d+\s*raciones\b', '', text, flags=re.IGNORECASE)
         text = re.sub(r'\b\d+X\d+[A-Za-z]*\b', '', text)
@@ -169,6 +173,8 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
 
         for page_idx, page in enumerate(reader.pages, start=1):
             elements = []
+            page_width = float(page.mediabox.width) if hasattr(page, 'mediabox') and page.mediabox else 595.0
+            midpoint = page_width / 2.0
 
             def visitor(text, cm, tm, font_dict, font_size):
                 t = text.strip()
@@ -208,20 +214,23 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
             # 2. Delimitar la tarjeta espacial de cada anclaje
             for ca in code_anchors:
                 cx, cy = ca['x'], ca['y']
+                is_left = cx < midpoint
                 card_elems = [
                     e for e in filtered_elements
-                    if abs(e['x'] - cx) < self.x_tolerance and (cy - self.y_below) <= e['y'] <= (cy + self.y_above)
+                    if (e['x'] < midpoint if is_left else e['x'] >= midpoint)
+                    and abs(e['x'] - cx) < self.x_tolerance
+                    and (cy - self.y_below) <= e['y'] <= (cy + self.y_above)
                 ]
 
-                # Nombre del producto y variedad: elementos situados por encima del código (y > cy)
-                name_candidates = [e for e in card_elems if e['y'] > cy]
+                # Nombre del producto y variedad: elementos situados por encima o alineados con el código
+                name_candidates = [e for e in card_elems if cy - 4.0 <= e['y'] <= cy + self.y_above]
                 name_candidates = sorted(name_candidates, key=lambda x: -x['y'])
 
                 name_tokens = []
                 for nc in name_candidates:
                     clean_t = self._clean_product_name(nc['text'])
                     clean_t = re.sub(r'C[:.]?\s*\d+', '', clean_t, flags=re.IGNORECASE).strip(' ·-(),')
-                    if clean_t and not clean_t.isdigit():
+                    if clean_t and not clean_t.isdigit() and '€' not in clean_t and len(clean_t) > 1:
                         name_tokens.append(clean_t)
 
                 raw_name = ' '.join(name_tokens).strip()
@@ -229,11 +238,11 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
                 # Formato de empaque
                 format_str = ''
                 for e in card_elems:
-                    fm = re.search(r'(\d+\s*uds?\s*[Xx]\s*[\d.,]+\s*[A-Za-z]+)', e['text'], re.IGNORECASE)
+                    fm = re.search(r'(\d+\s*uds?\s*[Xx]\s*[\d.,\'’]+\s*[A-Za-z]+)', e['text'], re.IGNORECASE)
                     if fm:
                         format_str = fm.group(1)
                         break
-                    fm2 = re.search(r'(\d+\s*ud\s*[Xx]\s*[\d.,]+\s*k?g)', e['text'], re.IGNORECASE)
+                    fm2 = re.search(r'(\d+\s*ud\s*[Xx]\s*[\d.,\'’]+\s*k?g)', e['text'], re.IGNORECASE)
                     if fm2:
                         format_str = fm2.group(1)
                         break
@@ -305,10 +314,10 @@ class DialvaPdfExtractor(SpatialCardPdfExtractor):
                 'SABOR Y JUGOSIDAD', 'DE CALDO DE PESCADO', 'ARROCES, PAELLAS', 'FIDEUÁS, SOPAS',
                 'OBTIENES APROXIMADAMENTE', 'COSTE REAL DEL CALDO'
             ],
-            x_tolerance=130.0,
+            x_tolerance=190.0,
             y_above=75.0,
             y_below=65.0,
-            header_y_limit=720.0,
+            header_y_limit=780.0,
             save_output=save_output
         )
 
@@ -333,32 +342,97 @@ class TabularPdfExtractor(BaseCatalogExtractor):
         reader = PdfReader(path)
         products: List[Dict[str, Any]] = []
 
+        # Detección heurística de metadatos de proveedor en todas las páginas del PDF
+        if len(reader.pages) > 0 and self.detected_supplier is None:
+            full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+            
+            # 1. CIF / NIF
+            cif_m = re.search(r'\b(?:CIF|NIF|N\.I\.F\.|C\.I\.F\.)?[:\s]*([A-HJ-NP-SUVW]\-?\d{7,8}[0-9A-J])\b', full_text, re.IGNORECASE)
+            cif = cif_m.group(1).strip() if cif_m else None
+            
+            # 2. Teléfonos (fijo y móvil, incluyendo dobles separados por - o /)
+            phone_m = re.search(
+                r'(?:(?:tel[ée]fono|whatsapp|tlf|pedidos|contacto)[^\d\n]*)((?:\+?34\s*)?(?:[6789]\d(?:\s*\d){7})(?:\s*[-/y]\s*(?:\+?34\s*)?(?:[6789]\d(?:\s*\d){7}))?)',
+                full_text,
+                re.IGNORECASE
+            )
+            phone = phone_m.group(1).strip() if phone_m else None
+            
+            # 3. Email
+            email_m = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', full_text)
+            email = email_m.group(1).strip() if email_m else None
+            
+            # 4. Razón Social o Nombre de Empresa
+            # Buscar primero líneas formales con forma societaria (S.L., S.A., C.B., etc.)
+            supp_name = None
+            company_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:S\.L\.|S\.A\.|C\.B\.|S\.L\.U\.|S\.C\.|S\.A\.U\.))', full_text)
+            if company_m:
+                supp_name = re.sub(r'[\r\n]+', ' ', company_m.group(1)).strip()
+                supp_name = re.sub(r'^[\s.,;:-]+|[\s.,;:-]+$', '', supp_name)
+            
+            if not supp_name:
+                first_text = reader.pages[0].extract_text() or ""
+                lines = [l.strip() for l in first_text.split('\n') if l.strip() and not any(k in l.lower() for k in ['pág', 'fecha', 'cif', 'tarifa', 'listado', 'nombre', 'precio', 'lote', 'kg', 'iva'])]
+                supp_name = lines[0] if lines else path.stem.replace('-', ' ').replace('_', ' ').title()
+            
+            self.detected_supplier = {
+                "name": supp_name,
+                "cif": cif,
+                "phone": phone,
+                "email": email
+            }
+
         line_pattern = re.compile(
-            r'^(?:([A-Za-z0-9_-]+)\s+)?'             # Código opcional
-            r'([A-Za-zÁÉÍÓÚáéíóúÑñ0-9\s/.,\-+]+?)\s+' # Nombre producto
-            r'(\d+[.,]\d{2})\s*'                      # Precio numérico
-            r'(?:€\s*(?:/\s*([a-záéíóúA-Z]+))?|€)?$'  # Unidad opcional tras €
+            r'^\s*(?:([A-Za-z0-9_-]+)\s+)?'             # Código opcional
+            r'([A-Za-zÁÉÍÓÚáéíóúÑñ0-9\s/.,\-+ªº]+?)\s+' # Nombre producto
+            r'(\d+[.,]\d{2})\s*'                         # Precio numérico
+            r'(?:€\s*(?:/\s*([a-záéíóúA-Z]+))?|€)?\s*$' # Unidad opcional tras €
+        )
+        subitem_pattern = re.compile(
+            r'^\s*([A-Za-zÁÉÍÓÚáéíóúÑñ0-9\s/.,\-+ªº()]+?)\s+(\d+(?:[.,]\d+)?\s*(?:kg|ud|k))\s*$',
+            re.I
         )
 
         for page in reader.pages:
-            text = page.extract_text() or ""
+            try:
+                text = page.extract_text(extraction_mode="layout") or page.extract_text() or ""
+            except Exception:
+                text = page.extract_text() or ""
+
+            current_bundle = None
             for line in text.split("\n"):
                 line = line.strip()
-                if not line or len(line) < 5:
+                if not line or len(line) < 3:
                     continue
                 m = line_pattern.match(line)
                 if m:
                     code, name, price_str, unit = m.groups()
                     try:
                         price = float(price_str.replace(",", "."))
-                        products.append({
+                        prod_dict = {
                             "supplier_product_code": code or None,
                             "raw_name": name.strip(),
                             "price": price,
-                            "unit": (unit or "ud").lower()
-                        })
+                            "unit": (unit or "ud").lower(),
+                            "_subitems": []
+                        }
+                        products.append(prod_dict)
+                        current_bundle = prod_dict
                     except ValueError:
                         continue
+                elif current_bundle is not None:
+                    sub_m = subitem_pattern.match(line)
+                    if sub_m:
+                        sub_name = sub_m.group(1).strip()
+                        current_bundle["_subitems"].append(sub_name)
+
+        # Enriquecer lotes y packs con el desglose de cortes que incluyen
+        for prod in products:
+            subitems = prod.pop("_subitems", [])
+            if subitems:
+                preview = ", ".join(s.title() for s in subitems)
+                prod["format"] = f"Pack ({preview})"
+                prod["raw_name"] = f"{prod['raw_name']} ({preview})"
 
         print(f"✅ [TabularPdfExtractor] Se extrajeron {len(products)} productos.")
         return products
@@ -387,22 +461,35 @@ class GeminiMultimodalPdfExtractor(BaseCatalogExtractor):
             print("⚠️ [GeminiMultimodalPdfExtractor] No hay GEMINI_API_KEY configurada. Usando fallback tabular.")
             return TabularPdfExtractor().extract(file_path)
 
+        # Para catálogos voluminosos (> 3MB) como Abordo (7MB), priorizar extracción tabular local instantánea
+        if path.stat().st_size > 3 * 1024 * 1024:
+            print(f"⚡ [GeminiMultimodalPdfExtractor] Catálogo voluminoso ({path.stat().st_size / (1024*1024):.1f} MB). Usando extractor tabular local ultrarrápido...")
+            fallback = TabularPdfExtractor()
+            items = fallback.extract(file_path)
+            if len(items) > 0:
+                self.detected_supplier = fallback.detected_supplier
+                return items
+
         print(f"🤖 [GeminiMultimodalPdfExtractor] Procesando {path.name} mediante Gemini 1.5 Flash...")
         try:
             with open(path, "rb") as f:
                 pdf_bytes = f.read()
 
             encoded_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
 
             prompt = (
-                "Eres un extractor de datos para hostelería. Analiza las páginas de este catálogo comercial de proveedor "
-                "y extrae todos los productos listados con su nombre exacto, precio unitario numérico, unidad de venta (kg, L, ud, caja, sobre), "
-                "formato de empaque si aparece y código de referencia del proveedor si existe. "
-                "Devuelve EXCLUSIVAMENTE un JSON array con objetos como este:\n"
-                "[\n"
-                '  {"raw_name": "Nombre", "price": 10.50, "unit": "kg", "supplier_product_code": "REF01", "format": "Caja 5kg"}\n'
-                "]\n"
+                "Eres un extractor de datos para hostelería. Analiza las páginas de este catálogo comercial de proveedor.\n"
+                "1. Extrae los datos del PROVEEDOR o empresa identificada en el documento (nombre o razón social, teléfono/WhatsApp, email y CIF si aparecen).\n"
+                "2. Extrae todos los PRODUCTOS listados con su nombre exacto ('raw_name'), precio unitario numérico ('price'), "
+                "unidad ('unit': kg, L, ud, caja, sobre), formato ('format') y código del proveedor ('supplier_product_code').\n\n"
+                "Devuelve EXCLUSIVAMENTE un JSON con esta estructura exacta:\n"
+                "{\n"
+                '  "supplier": {"name": "Nombre Proveedor", "phone": "+34...", "email": "pedidos@...", "cif": "B12345678"},\n'
+                '  "products": [\n'
+                '    {"raw_name": "Nombre", "price": 10.50, "unit": "kg", "supplier_product_code": "REF01", "format": "Caja 5kg"}\n'
+                "  ]\n"
+                "}\n"
+                "Si no logras identificar el nombre de empresa, pon en 'supplier' el título del catálogo.\n"
                 "Sin bloques markdown ni explicaciones adicionales."
             )
 
@@ -426,39 +513,72 @@ class GeminiMultimodalPdfExtractor(BaseCatalogExtractor):
                 }
             }
 
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(url, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    text_response = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    if text_response.startswith("```"):
-                        text_response = re.sub(r"^```[a-zA-Z]*\n?", "", text_response)
-                        text_response = re.sub(r"\n?```$", "", text_response)
-                    items = json.loads(text_response)
-                    if isinstance(items, list):
-                        valid_items = []
-                        for it in items:
-                            if isinstance(it, dict) and it.get("raw_name"):
-                                try:
-                                    price = float(it.get("price", 0.0))
-                                except (ValueError, TypeError):
-                                    price = 0.0
-                                valid_items.append({
-                                    "raw_name": str(it["raw_name"]).strip(),
-                                    "price": price,
-                                    "unit": str(it.get("unit", "ud")).strip().lower(),
-                                    "supplier_product_code": str(it.get("supplier_product_code")) if it.get("supplier_product_code") else None,
-                                    "format": str(it.get("format")) if it.get("format") else None
-                                })
-                        print(f"✅ [GeminiMultimodalPdfExtractor] Extraídos {len(valid_items)} productos con éxito.")
-                        return valid_items
-                else:
-                    print(f"⚠️ [GeminiMultimodalPdfExtractor] Error HTTP {resp.status_code}: {resp.text}")
+            candidate_models = ["gemini-2.5-flash", "gemini-flash-latest"]
+
+            for model_name in candidate_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                print(f"🤖 [GeminiMultimodalPdfExtractor] Probando modelo '{model_name}'...")
+
+                try:
+                    with httpx.Client(timeout=10.0) as client:
+                        resp = client.post(url, json=payload)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            text_response = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                            if text_response.startswith("```"):
+                                text_response = re.sub(r"^```[a-zA-Z]*\n?", "", text_response)
+                                text_response = re.sub(r"\n?```$", "", text_response)
+                            parsed_json = json.loads(text_response)
+                            items = []
+                            if isinstance(parsed_json, dict):
+                                supp_data = parsed_json.get("supplier")
+                                if isinstance(supp_data, dict) and supp_data.get("name"):
+                                    self.detected_supplier = {
+                                        "name": str(supp_data.get("name")).strip(),
+                                        "phone": str(supp_data.get("phone")).strip() if supp_data.get("phone") else None,
+                                        "email": str(supp_data.get("email")).strip() if supp_data.get("email") else None,
+                                        "cif": str(supp_data.get("cif")).strip() if supp_data.get("cif") else None
+                                    }
+                                items = parsed_json.get("products", [])
+                            elif isinstance(parsed_json, list):
+                                items = parsed_json
+
+                            if isinstance(items, list):
+                                valid_items = []
+                                for it in items:
+                                    if isinstance(it, dict) and it.get("raw_name"):
+                                        try:
+                                            price = float(it.get("price", 0.0))
+                                        except (ValueError, TypeError):
+                                            price = 0.0
+                                        valid_items.append({
+                                            "raw_name": str(it["raw_name"]).strip(),
+                                            "price": price,
+                                            "unit": str(it.get("unit", "ud")).strip().lower(),
+                                            "supplier_product_code": str(it.get("supplier_product_code")) if it.get("supplier_product_code") else None,
+                                            "format": str(it.get("format")) if it.get("format") else None
+                                        })
+                                print(f"✅ [GeminiMultimodalPdfExtractor - {model_name}] Extraídos {len(valid_items)} productos con éxito.")
+                                return valid_items
+                        elif resp.status_code in [401, 402, 429]:
+                            print(f"⚠️ [GeminiMultimodalPdfExtractor] Cuota o autenticación no disponible ({resp.status_code}). Saltando a fallback local...")
+                            break
+                        elif resp.status_code in [404, 503]:
+                            print(f"ℹ️ [GeminiMultimodalPdfExtractor] Modelo '{model_name}' no disponible ({resp.status_code}). Probando siguiente...")
+                            continue
+                        else:
+                            print(f"⚠️ [GeminiMultimodalPdfExtractor] Error HTTP {resp.status_code}: {resp.text}")
+                except Exception as e:
+                    print(f"⚠️ [GeminiMultimodalPdfExtractor] Excepción llamando a {model_name}: {e}")
+                    continue
         except Exception as e:
-            print(f"⚠️ [GeminiMultimodalPdfExtractor] Excepción llamando a Gemini: {e}")
+            print(f"⚠️ [GeminiMultimodalPdfExtractor] Excepción global: {e}")
 
         print("🔄 [GeminiMultimodalPdfExtractor] Activando fallback TabularPdfExtractor...")
-        return TabularPdfExtractor().extract(file_path)
+        fallback = TabularPdfExtractor()
+        items = fallback.extract(file_path)
+        self.detected_supplier = fallback.detected_supplier
+        return items
 
 
 # ==============================================================================
@@ -479,7 +599,9 @@ class ExtractorFactory:
         ("pdf", "prov_dialva_04"): DialvaPdfExtractor,
         ("pdf", "dialva"): DialvaPdfExtractor,
         ("pdf", "gemini"): GeminiMultimodalPdfExtractor,
-        ("pdf", None): TabularPdfExtractor,  # Estrategia por defecto para PDFs generales
+        ("pdf", "auto"): GeminiMultimodalPdfExtractor,
+        ("pdf", "nuevo"): GeminiMultimodalPdfExtractor,
+        ("pdf", None): GeminiMultimodalPdfExtractor,  # Por defecto IA multimodal para PDFs nuevos
     }
 
     @classmethod
@@ -545,9 +667,19 @@ def extract_catalog(
     return extractor.extract(file_path)
 
 
+def extract_catalog_with_supplier(
+    file_path: Union[str, Path],
+    provider_id: Optional[str] = None
+) -> tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """Punto de entrada universal que devuelve tanto los productos extraídos como los metadatos del proveedor identificado."""
+    extractor = ExtractorFactory.get_extractor(file_path=file_path, provider_id=provider_id)
+    items = extractor.extract(file_path)
+    return items, getattr(extractor, "detected_supplier", None)
+
+
 def extract_image_list(image_bytes: bytes) -> List[Dict[str, Any]]:
     """Extrae productos manuscritos mediante OCR (lista de pizarra / nevera)."""
-    from .ocr import process_fridge_photo
+    from .vision_ai import process_fridge_photo
     return process_fridge_photo(image_bytes)
 
 
