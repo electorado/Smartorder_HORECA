@@ -28,13 +28,60 @@ class OrderHistoryActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupRecyclerView()
+        setupBottomNavigation()
         loadHistory()
     }
 
-    private fun setupRecyclerView() {
-        adapter = OrderHistoryAdapter { order ->
-            handleWhatsAppClick(order)
+    private fun setupBottomNavigation() {
+        binding.navItemOrder.setOnClickListener {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("EXTRA_TAB_INDEX", 0)
+            }
+            startActivity(intent)
+            finish()
         }
+
+        binding.navItemCatalog.setOnClickListener {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("EXTRA_TAB_INDEX", 1)
+            }
+            startActivity(intent)
+            finish()
+        }
+
+        binding.navItemCamera.setOnClickListener {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("EXTRA_START_SCAN", true)
+            }
+            startActivity(intent)
+            finish()
+        }
+
+        binding.navItemHistory.setOnClickListener {
+            binding.rvOrderHistory.smoothScrollToPosition(0)
+        }
+
+        binding.navItemSuppliers.setOnClickListener {
+            val intent = Intent(this, SuppliersActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            startActivity(intent)
+            finish()
+        }
+    }
+
+    private fun setupRecyclerView() {
+        adapter = OrderHistoryAdapter(
+            onReopenWhatsApp = { order ->
+                handleWhatsAppClick(order)
+            },
+            onViewPdf = { order ->
+                handleViewPdf(order)
+            }
+        )
         binding.rvOrderHistory.layoutManager = LinearLayoutManager(this)
         binding.rvOrderHistory.adapter = adapter
     }
@@ -108,6 +155,18 @@ class OrderHistoryActivity : AppCompatActivity() {
                 }
                 .setPositiveButton("Cerrar", null)
                 .show()
+        }
+    }
+
+    private fun handleViewPdf(order: OrderDetailResponse) {
+        val prefs = getSharedPreferences("session_prefs", MODE_PRIVATE)
+        val restaurantName = prefs.getString("KEY_RESTAURANT_NAME", "F&B SMARTORDER RESTAURANT") ?: "F&B SMARTORDER RESTAURANT"
+        val chefName = prefs.getString("KEY_CHEF_NAME", "Chef de Turno") ?: "Chef de Turno"
+        try {
+            val pdfFile = com.fb.smartorder.util.PdfOrderGenerator.generateOrderPdf(this, order, restaurantName, chefName)
+            com.fb.smartorder.util.PdfOrderGenerator.openPdfViewer(this, pdfFile)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error generando PDF: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }

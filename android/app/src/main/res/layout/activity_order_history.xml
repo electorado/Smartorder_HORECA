@@ -5,7 +5,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_paper"
-    android:padding="16dp"
     tools:context=".OrderHistoryActivity">
 
     <!-- Cabecera Vintage -->
@@ -13,6 +12,9 @@
         android:id="@+id/layoutHistoryHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
         android:background="@drawable/bg_stamp_header"
         android:gravity="center"
         android:orientation="vertical"
@@ -44,7 +46,9 @@
         android:id="@+id/layoutFilter"
         android:layout_width="match_parent"
         android:layout_height="44dp"
+        android:layout_marginStart="16dp"
         android:layout_marginTop="10dp"
+        android:layout_marginEnd="16dp"
         android:background="@drawable/bg_btn_secondary_retro"
         android:gravity="center_vertical"
         android:paddingStart="12dp"
@@ -73,10 +77,12 @@
         android:id="@+id/rvOrderHistory"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:layout_marginStart="16dp"
         android:layout_marginTop="10dp"
+        android:layout_marginEnd="16dp"
         android:clipToPadding="false"
         android:paddingBottom="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/layoutBottomNav"
         app:layout_constraintTop_toBottomOf="@id/layoutFilter"
         tools:listitem="@layout/item_order_history" />
 
@@ -87,7 +93,7 @@
         android:layout_height="wrap_content"
         android:indeterminateTint="@color/stamp_red"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/layoutBottomNav"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/layoutFilter" />
@@ -102,10 +108,152 @@
         android:textColor="@color/text_muted"
         android:textSize="16sp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/layoutBottomNav"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/layoutFilter" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <!-- Barra Inferior de Navegación -->
+    <LinearLayout
+        android:id="@+id/layoutBottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="@drawable/bg_bottom_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
+        <!-- Tab: Comanda -->
+        <LinearLayout
+            android:id="@+id/navItemOrder"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavOrderIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_order" />
+
+            <TextView
+                android:id="@+id/tvNavOrderLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Comanda"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Tab: Catálogo -->
+        <LinearLayout
+            android:id="@+id/navItemCatalog"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavCatalogIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_catalog" />
+
+            <TextView
+                android:id="@+id/tvNavCatalogLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Catálogo"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Botón Central: Cámara -->
+        <LinearLayout
+            android:id="@+id/navItemCamera"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_camera_fab"
+                android:gravity="center">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_nav_camera" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- Tab: Historial (Activo) -->
+        <LinearLayout
+            android:id="@+id/navItemHistory"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavHistoryIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_history"
+                app:tint="@color/stamp_red" />
+
+            <TextView
+                android:id="@+id/tvNavHistoryLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Historial"
+                android:textColor="@color/stamp_red"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Tab: Proveedores -->
+        <LinearLayout
+            android:id="@+id/navItemSuppliers"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavSuppliersIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_suppliers" />
+
+            <TextView
+                android:id="@+id/tvNavSuppliersLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Proveedores"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

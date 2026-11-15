@@ -52,6 +52,9 @@ data class SupplierSubOrderResponse(
     @SerializedName("supplier_name")
     val supplierName: String,
 
+    @SerializedName("supplier_email")
+    val supplierEmail: String? = null,
+
     @SerializedName("supplier_phone")
     val supplierPhone: String?,
 
@@ -65,7 +68,13 @@ data class SupplierSubOrderResponse(
     val whatsappUrl: String?,
 
     @SerializedName("whatsapp_text")
-    val whatsappText: String?
+    val whatsappText: String?,
+
+    @SerializedName("email_dispatched")
+    val emailDispatched: Boolean? = false,
+
+    @SerializedName("email_status")
+    val emailStatus: String? = null
 )
 
 data class OrderDetailResponse(

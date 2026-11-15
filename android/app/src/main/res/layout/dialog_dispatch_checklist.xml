@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/bg_paper"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Cabecera -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🚀"
+            android:textSize="22sp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="MUELLE DE SALIDA"
+                android:textColor="@color/stamp_red"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvOrderRef"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Pedido registrado"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Nota informativa -->
+    <TextView
+        android:id="@+id/tvDispatchHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="#EFEBE9"
+        android:fontFamily="sans-serif-condensed"
+        android:padding="8dp"
+        android:text="✉️ Los pedidos por email salen automáticamente por servidor. Pulsa en cada WhatsApp para abrir el chat del proveedor."
+        android:textColor="@color/text_secondary"
+        android:textSize="11sp" />
+
+    <!-- Lista de Proveedores con scroll -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:maxHeight="340dp">
+
+        <LinearLayout
+            android:id="@+id/layoutSubordersContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <!-- Contador de Progreso -->
+    <TextView
+        android:id="@+id/tvDispatchProgress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="sans-serif-condensed"
+        android:gravity="center"
+        android:text="1 de 2 pedidos completados"
+        android:textColor="@color/text_primary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- Botón Ver Albarán PDF de Control (CU04 / R04F03) -->
+    <Button
+        android:id="@+id/btnViewPdfDispatch"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:layout_marginTop="8dp"
+        android:backgroundTint="#4E342E"
+        android:fontFamily="sans-serif-condensed"
+        android:text="📄 VER ALBARÁN PDF (MUELLE)"
+        android:textColor="@color/white"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- Botón Finalizar -->
+    <Button
+        android:id="@+id/btnFinishDispatch"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginTop="8dp"
+        android:backgroundTint="@color/stamp_red"
+        android:fontFamily="sans-serif-condensed"
+        android:text="FINALIZAR Y LIMPIAR COMANDA"
+        android:textColor="@color/white"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <Button
+        android:id="@+id/btnDismissDispatch"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:fontFamily="sans-serif-condensed"
+        android:text="Cerrar sin limpiar"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp" />
+</LinearLayout>
