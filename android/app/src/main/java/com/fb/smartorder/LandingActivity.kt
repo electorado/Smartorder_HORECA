@@ -25,7 +25,8 @@ class LandingActivity : AppCompatActivity() {
         binding = ActivityLandingBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Sincronizar URL guardada con RetrofitClient
+        // Sincronizar URL guardada con RetrofitClient y asegurar activeEmail en memoria
+        SessionManager.getUserEmail(this)
         val savedServer = SessionManager.getServerUrl(this)
         if (savedServer.isNotBlank()) {
             RetrofitClient.updateBaseUrl(savedServer)

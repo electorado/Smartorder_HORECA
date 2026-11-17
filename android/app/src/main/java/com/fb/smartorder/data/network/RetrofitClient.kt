@@ -2,6 +2,7 @@ package com.fb.smartorder.data.network
 
 import android.content.Context
 import com.fb.smartorder.util.SessionManager
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -46,7 +47,21 @@ object RetrofitClient {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
+    private val authHeaderInterceptor = Interceptor { chain ->
+        val original = chain.request()
+        val email = SessionManager.activeEmail
+        if (email.isNotBlank()) {
+            val req = original.newBuilder()
+                .header("X-User-Email", email)
+                .build()
+            chain.proceed(req)
+        } else {
+            chain.proceed(original)
+        }
+    }
+
     private val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor(authHeaderInterceptor)
         .addInterceptor(loggingInterceptor)
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)

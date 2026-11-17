@@ -7,27 +7,29 @@ def load_raw_products(
     provider_id: str,
     products: List[Dict[str, Any]],
     supplier_name: Optional[str] = None,
-    is_annex: bool = False
+    is_annex: bool = False,
+    user_email: Optional[str] = None
 ) -> int:
-    """Carga o actualiza los productos procesados en la colección de MongoDB.
+    """Carga o actualiza los productos procesados en la colección de MongoDB asociados a un cocinero/usuario.
     Si is_annex es False (modo sustitución por defecto), purga los productos anteriores
-    del proveedor para que no queden ítems descatalogados o que ya no se pueden pedir.
+    del proveedor para este usuario para que no queden ítems descatalogados o que ya no se pueden pedir.
     Si is_annex es True (modo anexo), mantiene el catálogo base y solo añade/actualiza."""
     if not products:
         print("⚠️ No hay productos para cargar.")
         return 0
 
+    u_email = (user_email or "pablo@horeca.com").lower().strip()
     db = get_database()
     collection = db["productos_brutos"]
 
-    # En modo sustitución, purgar productos antiguos del proveedor
+    # En modo sustitución, purgar productos antiguos del proveedor para este usuario
     if not is_annex:
-        deleted = collection.delete_many({"supplier_id": provider_id})
-        print(f"🗑️ Reemplazo de catálogo: eliminados {deleted.deleted_count} productos anteriores del proveedor {provider_id}.")
+        deleted = collection.delete_many({"supplier_id": provider_id, "user_email": u_email})
+        print(f"🗑️ Reemplazo de catálogo: eliminados {deleted.deleted_count} productos anteriores del proveedor {provider_id} para {u_email}.")
 
     # Obtener nombre del proveedor si no se indicó
     if not supplier_name:
-        supp = db["proveedores"].find_one({"id": provider_id})
+        supp = db["proveedores"].find_one({"id": provider_id, "user_email": u_email}) or db["proveedores"].find_one({"id": provider_id})
         supplier_name = supp.get("name", provider_id) if supp else provider_id
 
     count = 0
@@ -58,6 +60,7 @@ def load_raw_products(
             )
 
         doc = {
+            "user_email": u_email,
             "supplier_id": provider_id,
             "supplier_name": supplier_name,
             "supplier_product_code": prod.get("supplier_product_code"),
@@ -75,8 +78,9 @@ def load_raw_products(
             "updated_at": now
         }
 
-        # Reemplazar o insertar si coincide proveedor y código/nombre
+        # Reemplazar o insertar si coincide usuario, proveedor y código/nombre
         filter_query = {
+            "user_email": u_email,
             "supplier_id": provider_id,
             "clean_name": doc["clean_name"]
         }

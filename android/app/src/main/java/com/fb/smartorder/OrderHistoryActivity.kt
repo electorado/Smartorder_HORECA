@@ -12,6 +12,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.fb.smartorder.databinding.ActivityOrderHistoryBinding
+import com.fb.smartorder.util.SessionManager
 import com.fb.smartorder.model.OrderDetailResponse
 import com.fb.smartorder.ui.OrderHistoryAdapter
 import com.fb.smartorder.ui.ProductViewModel
@@ -24,6 +25,7 @@ class OrderHistoryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SessionManager.getUserEmail(this)
         binding = ActivityOrderHistoryBinding.inflate(layoutInflater)
         setContentView(binding.root)
 

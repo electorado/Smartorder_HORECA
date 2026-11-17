@@ -16,6 +16,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.fb.smartorder.databinding.ActivityMainBinding
+import com.fb.smartorder.util.SessionManager
 import com.fb.smartorder.model.OrderDetailResponse
 import com.fb.smartorder.model.OrderItem
 import com.fb.smartorder.model.Product
@@ -67,6 +68,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SessionManager.getUserEmail(this)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 

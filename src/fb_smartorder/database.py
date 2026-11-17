@@ -123,8 +123,11 @@ def init_db(db_name="fb_smartorder"):
         for ing in master_seeds:
             db["ingredientes_maestros"].update_one({"id": ing["id"]}, {"$set": ing}, upsert=True)
 
-        # Semilla e índice de usuarios
+        # Semilla e índices de usuarios y multi-tenancy por cocinero
         db["usuarios"].create_index([("email", 1)], unique=True)
+        db["productos_brutos"].create_index([("user_email", 1)])
+        db["proveedores"].create_index([("user_email", 1)])
+        db["pedidos"].create_index([("user_email", 1)])
         if db["usuarios"].count_documents({"email": "pablo@horeca.com"}) == 0:
             db["usuarios"].insert_one({
                 "name": "Pablo Moncayo",

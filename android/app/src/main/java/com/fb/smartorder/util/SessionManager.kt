@@ -19,6 +19,9 @@ object SessionManager {
     private const val KEY_SERVER_URL = "key_server_url"
     const val DEFAULT_SERVER_URL = "https://smartorder-api-z4or.onrender.com/"
 
+    @Volatile
+    var activeEmail: String = ""
+
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
@@ -28,7 +31,11 @@ object SessionManager {
     }
 
     fun getUserEmail(context: Context): String {
-        return getPrefs(context).getString(KEY_USER_EMAIL, "pablo@horeca.com") ?: "pablo@horeca.com"
+        val email = getPrefs(context).getString(KEY_USER_EMAIL, "") ?: ""
+        if (email.isNotBlank()) {
+            activeEmail = email.trim().lowercase()
+        }
+        return email
     }
 
     fun getChefName(context: Context): String {
@@ -65,11 +72,13 @@ object SessionManager {
         email: String,
         serverUrl: String = ""
     ) {
+        val cleanEmail = email.trim().lowercase()
+        activeEmail = cleanEmail
         val editor = getPrefs(context).edit()
             .putBoolean(KEY_IS_LOGGED_IN, true)
             .putString(KEY_CHEF_NAME, chefName.trim())
             .putString(KEY_RESTAURANT_NAME, restaurantName.trim())
-            .putString(KEY_USER_EMAIL, email.trim().lowercase())
+            .putString(KEY_USER_EMAIL, cleanEmail)
 
         if (serverUrl.trim().isNotEmpty()) {
             val formatted = if (serverUrl.trim().endsWith("/")) serverUrl.trim() else "${serverUrl.trim()}/"
@@ -79,8 +88,10 @@ object SessionManager {
     }
 
     fun logout(context: Context) {
+        activeEmail = ""
         getPrefs(context).edit()
             .putBoolean(KEY_IS_LOGGED_IN, false)
+            .putString(KEY_USER_EMAIL, "")
             .apply()
     }
 }

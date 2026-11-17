@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Query
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import tempfile
@@ -181,21 +181,34 @@ def update_user_profile(update_data: UserUpdate, email: str = Query(...)):
 
 
 @app.get("/api/v1/suppliers")
-def get_suppliers():
-    """Devuelve la lista de proveedores activos."""
+def get_suppliers(
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Devuelve la lista de proveedores del cocinero."""
     try:
         db = get_database()
-        suppliers = list(db["proveedores"].find({}, {"_id": 0}))
+        u_email = (x_user_email or user_email or "").lower().strip()
+        filter_query = {}
+        if u_email:
+            filter_query["user_email"] = u_email
+        suppliers = list(db["proveedores"].find(filter_query, {"_id": 0}))
         return {"suppliers": suppliers}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/suppliers")
-def create_or_update_supplier(supplier: Supplier):
-    """Crea o actualiza un proveedor (ej. importado de la agenda telefónica del cocinero)."""
+def create_or_update_supplier(
+    supplier: Supplier,
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Crea o actualiza un proveedor asociado al cocinero."""
     try:
         db = get_database()
+        u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
         supp_dict = supplier.model_dump()
+        supp_dict["user_email"] = u_email
         
         # Si no tiene ID o es provisional, generar uno seguro
         if not supp_dict.get("id"):
@@ -203,7 +216,7 @@ def create_or_update_supplier(supplier: Supplier):
             supp_dict["id"] = f"prov_{clean_id}"
 
         db["proveedores"].update_one(
-            {"id": supp_dict["id"]},
+            {"id": supp_dict["id"], "user_email": u_email},
             {"$set": supp_dict},
             upsert=True
         )
@@ -215,12 +228,23 @@ def create_or_update_supplier(supplier: Supplier):
         raise HTTPException(status_code=500, detail=f"Error guardando proveedor: {str(e)}")
 
 @app.delete("/api/v1/suppliers/{supplier_id}")
-def delete_supplier(supplier_id: str):
-    """Elimina un proveedor y limpia automáticamente sus productos asociados del catálogo."""
+def delete_supplier(
+    supplier_id: str,
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Elimina un proveedor y limpia automáticamente sus productos asociados del catálogo del cocinero."""
     try:
         db = get_database()
-        res = db["proveedores"].delete_one({"id": supplier_id})
-        prod_res = db["productos_brutos"].delete_many({"supplier_id": supplier_id})
+        u_email = (x_user_email or user_email or "").lower().strip()
+        del_filter = {"id": supplier_id}
+        if u_email:
+            del_filter["user_email"] = u_email
+        res = db["proveedores"].delete_one(del_filter)
+        if u_email:
+            prod_res = db["productos_brutos"].delete_many({"supplier_id": supplier_id, "user_email": u_email})
+        else:
+            prod_res = db["productos_brutos"].delete_many({"supplier_id": supplier_id})
         return {
             "message": f"Proveedor '{supplier_id}' eliminado correctamente. Se han retirado {prod_res.deleted_count} productos del catálogo.",
             "deleted_supplier": res.deleted_count > 0,
@@ -265,12 +289,18 @@ def get_ingredients(query: Optional[str] = None):
 @app.get("/api/v1/products")
 def get_products(
     query: Optional[str] = Query(None, description="Filtro opcional por nombre o categoría"),
-    supplier_id: Optional[str] = Query(None, description="Filtro opcional por proveedor")
+    supplier_id: Optional[str] = Query(None, description="Filtro opcional por proveedor"),
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Devuelve el catálogo completo de todos los productos y ofertas disponibles de los proveedores."""
+    """Devuelve el catálogo de productos y ofertas del cocinero."""
     try:
         db = get_database()
+        u_email = (x_user_email or user_email or "").lower().strip()
         filter_query = {}
+        if u_email:
+            filter_query["user_email"] = u_email
+
         if supplier_id:
             filter_query["supplier_id"] = supplier_id
 
@@ -307,26 +337,6 @@ def get_products(
                 "available_offers": 1
             })
 
-        # Fallback a ingredientes maestros si productos_brutos estuviera vacío
-        if not products:
-            m_query = {}
-            if query:
-                m_query["$or"] = [
-                    {"name": {"$regex": query, "$options": "i"}},
-                    {"category": {"$regex": query, "$options": "i"}}
-                ]
-            for m in db["ingredientes_maestros"].find(m_query, {"_id": 0}):
-                products.append({
-                    "id": m["id"],
-                    "name": m["name"],
-                    "category": m.get("category", "General"),
-                    "standard_unit": m.get("standard_unit", "kg"),
-                    "best_price": None,
-                    "best_supplier_id": None,
-                    "best_supplier_name": None,
-                    "available_offers": 0
-                })
-
         return {"products": products}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -335,11 +345,14 @@ def get_products(
 async def upload_catalog(
     supplier_id: str = Form("auto"),
     is_annex: bool = Form(False),
+    user_email: Optional[str] = Form(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email"),
     file: UploadFile = File(...)
 ):
-    """Sube un archivo de catálogo (PDF o Excel), auto-detecta el proveedor si es necesario, lo almacena en GridFS y ejecuta el pipeline ETL."""
+    """Sube un archivo de catálogo (PDF o Excel), auto-detecta el proveedor si es necesario, lo almacena en GridFS y ejecuta el pipeline ETL asociado al cocinero."""
     try:
         db = get_database()
+        u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
         file_bytes = await file.read()
         filename = file.filename or "catalogo.pdf"
         ext = os.path.splitext(filename)[1].lower()
@@ -359,7 +372,7 @@ async def upload_catalog(
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
-        # 3. Resolución / Alta automática del Proveedor
+        # 3. Resolución / Alta automática del Proveedor para este cocinero
         is_new_supplier = False
         is_auto_detect = not supplier_id or supplier_id.lower() in ["auto", "nuevo", "detect", "none"]
 
@@ -376,8 +389,9 @@ async def upload_catalog(
             slug = re.sub(r"[^a-z0-9]", "_", candidate_name.lower())[:25].strip("_")
             candidate_id = f"prov_{slug}" if slug else f"prov_{int(datetime.utcnow().timestamp())}"
 
-            # Buscar si ya existe por ID o nombre
+            # Buscar si ya existe para este usuario por ID o nombre
             existing = db["proveedores"].find_one({
+                "user_email": u_email,
                 "$or": [
                     {"id": candidate_id},
                     {"name": {"$regex": f"^{re.escape(candidate_name)}$", "$options": "i"}}
@@ -394,13 +408,14 @@ async def upload_catalog(
                 if not existing.get("email") and detected_supplier and detected_supplier.get("email"):
                     updates["email"] = detected_supplier["email"]
                 if updates:
-                    db["proveedores"].update_one({"id": supplier_id}, {"$set": updates})
+                    db["proveedores"].update_one({"id": supplier_id, "user_email": u_email}, {"$set": updates})
             else:
                 s_phone = detected_supplier.get("phone") if detected_supplier else None
                 s_email = detected_supplier.get("email") if detected_supplier else None
                 # Preferir WhatsApp si hay teléfono (especialmente si incluye móviles 6xx / 7xx o se indica en el catálogo)
                 s_channel = "whatsapp" if s_phone else ("email" if s_email else "whatsapp")
                 new_doc = {
+                    "user_email": u_email,
                     "id": candidate_id,
                     "name": candidate_name,
                     "email": s_email,
@@ -418,10 +433,11 @@ async def upload_catalog(
                 supplier_name = candidate_name
                 is_new_supplier = True
         else:
-            supplier = db["proveedores"].find_one({"id": supplier_id})
+            supplier = db["proveedores"].find_one({"id": supplier_id, "user_email": u_email})
             if not supplier:
                 supplier_name = supplier_id.replace("prov_", "").replace("_", " ").title()
                 supplier = {
+                    "user_email": u_email,
                     "id": supplier_id,
                     "name": supplier_name,
                     "email": f"pedidos@{supplier_id}.com",
@@ -444,8 +460,8 @@ async def upload_catalog(
         master_ingredients = list(db["ingredientes_maestros"].find({}, {"_id": 0}))
         transformed_products = resolve_entities(raw_extracted, master_ingredients)
 
-        # 6. Fase de Carga a MongoDB (por defecto sustituye la tarifa para evitar descatalogados; en anexo acumula)
-        loaded_count = load_raw_products(supplier_id, transformed_products, supplier_name, is_annex=is_annex)
+        # 6. Fase de Carga a MongoDB (asociada al usuario)
+        loaded_count = load_raw_products(supplier_id, transformed_products, supplier_name, is_annex=is_annex, user_email=u_email)
 
         mode_msg = "Anexo de ofertas incorporado con éxito" if is_annex else "Catálogo renovado con éxito (se han sustituido los productos anteriores para evitar descatalogados)"
 
@@ -468,7 +484,11 @@ async def upload_catalog(
         raise HTTPException(status_code=500, detail=f"Error procesando catálogo: {str(e)}")
 
 @app.post("/api/v1/orders")
-def create_order(order_data: Order):
+def create_order(
+    order_data: Order,
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
     """Crea y consolida un nuevo pedido en el sistema, dividiéndolo automáticamente por proveedores y generando mensajes WhatsApp."""
     try:
         db = get_database()
@@ -576,6 +596,8 @@ def create_order(order_data: Order):
         order_data.status = "pending"
 
         order_dict = order_data.model_dump() if hasattr(order_data, "model_dump") else order_data.dict()
+        u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
+        order_dict["user_email"] = u_email
         res = db["pedidos"].insert_one(order_dict)
         order_id = str(res.inserted_id)
         order_dict["id"] = order_id
@@ -591,11 +613,16 @@ def create_order(order_data: Order):
         raise HTTPException(status_code=500, detail=f"Error creando pedido: {str(e)}")
 
 @app.get("/api/v1/orders")
-def list_orders():
-    """Obtiene el historial de pedidos."""
+def list_orders(
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Obtiene el historial de pedidos del cocinero."""
     try:
         db = get_database()
-        orders = list(db["pedidos"].find().sort("created_at", -1))
+        u_email = (x_user_email or user_email or "").lower().strip()
+        filter_query = {"user_email": u_email} if u_email else {}
+        orders = list(db["pedidos"].find(filter_query).sort("created_at", -1))
         for o in orders:
             o["id"] = str(o["_id"])
             del o["_id"]
@@ -641,10 +668,15 @@ def send_order(order_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/ocr/fridge-list")
-async def scan_fridge_photo(file: UploadFile = File(...)):
-    """Recibe una foto de la lista de la nevera/pizarra, extrae los ítems y los mapea con el catálogo maestro."""
+async def scan_fridge_photo(
+    file: UploadFile = File(...),
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Recibe una foto de la lista de la nevera/pizarra, extrae los ítems y los mapea con el catálogo del cocinero."""
     try:
         from .vision_ai import process_fridge_photo
+        u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
         file_bytes = await file.read()
         
         # 1. Extraer ítems de la foto
@@ -655,13 +687,13 @@ async def scan_fridge_photo(file: UploadFile = File(...)):
         master_ingredients = list(db["ingredientes_maestros"].find({}, {"_id": 0}))
         mapped_items = resolve_entities(raw_items, master_ingredients)
         
-        # 3. Asignar mejor oferta disponible para cada ingrediente
+        # 3. Asignar mejor oferta disponible para cada ingrediente (solo en el catálogo del cocinero)
         suggested_order_items = []
         for item in mapped_items:
             m_id = item.get("master_ingredient_id")
             best_offer = None
             if m_id:
-                raw_offers = list(db["productos_brutos"].find({"master_ingredient_id": m_id}))
+                raw_offers = list(db["productos_brutos"].find({"master_ingredient_id": m_id, "user_email": u_email}))
                 raw_offers.sort(key=lambda x: x.get("canonical_price") or x.get("price", 99999.0))
                 if raw_offers:
                     best = raw_offers[0]
@@ -670,14 +702,17 @@ async def scan_fridge_photo(file: UploadFile = File(...)):
                     best["product_id"] = p_id
                     best_offer = best
 
-            # Fallback a búsqueda directa por nombre en productos_brutos
+            # Fallback a búsqueda directa por nombre en productos_brutos del cocinero
             if not best_offer and item.get("raw_name"):
                 name_clean = re.sub(r'[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]', '', item.get("raw_name")).strip()
                 if len(name_clean) >= 3:
-                    name_query = {"$or": [
-                        {"raw_name": {"$regex": re.escape(name_clean), "$options": "i"}},
-                        {"clean_name": {"$regex": re.escape(name_clean), "$options": "i"}}
-                    ]}
+                    name_query = {
+                        "user_email": u_email,
+                        "$or": [
+                            {"raw_name": {"$regex": re.escape(name_clean), "$options": "i"}},
+                            {"clean_name": {"$regex": re.escape(name_clean), "$options": "i"}}
+                        ]
+                    }
                     candidates = list(db["productos_brutos"].find(name_query))
                     if candidates:
                         candidates.sort(key=lambda x: x.get("canonical_price") or x.get("price", 99999.0))
@@ -707,7 +742,11 @@ async def scan_fridge_photo(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error al procesar foto de la nevera: {str(e)}")
 
 @app.post("/api/v1/scan-kitchen-notes")
-async def scan_kitchen_notes(file: UploadFile = File(...)):
+async def scan_kitchen_notes(
+    file: UploadFile = File(...),
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
     """Alias para escanear notas manuscritas o listas de cocina."""
-    return await scan_fridge_photo(file)
+    return await scan_fridge_photo(file, user_email=user_email, x_user_email=x_user_email)
 
