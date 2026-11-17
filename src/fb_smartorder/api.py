@@ -379,15 +379,15 @@ def get_products(
     """Devuelve el catálogo de productos y ofertas del cocinero."""
     try:
         db = get_database()
-        u_email = (x_user_email or user_email or "").lower().strip()
+        u_email = (x_user_email if isinstance(x_user_email, str) else user_email if isinstance(user_email, str) else "").lower().strip()
         filter_query = {}
         if u_email:
             filter_query["user_email"] = u_email
 
-        if supplier_id:
+        if supplier_id and isinstance(supplier_id, str):
             filter_query["supplier_id"] = supplier_id
 
-        if query:
+        if query and isinstance(query, str):
             filter_query["$or"] = [
                 {"raw_name": {"$regex": query, "$options": "i"}},
                 {"clean_name": {"$regex": query, "$options": "i"}},
