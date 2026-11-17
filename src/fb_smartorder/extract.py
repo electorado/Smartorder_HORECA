@@ -457,6 +457,169 @@ class DialvaPdfExtractor(SpatialCardPdfExtractor):
 
 
 # ==============================================================================
+# 4.1. ESTRATEGIA ESPECÍFICA ABORDO / SERVIFRÍO (Extractor Espacial de Tarjetas)
+# ==============================================================================
+
+class AbordoPdfExtractor(BaseCatalogExtractor):
+    """Estrategia especializada con delimitación geométrica de tarjetas y lógica de precios
+    para el catálogo de Abordo Hostelería / Servifrío.
+    
+    Resuelve específicamente:
+    1. Delimitación vertical de tarjetas consecutivas para evitar que precios o textos de una tarjeta
+       se mezclen con el título o datos de la tarjeta adyacente.
+    2. Identificación precisa del título en la línea del anclaje C-XXXX y su posible continuación (subline).
+    3. Captura del precio real de oferta (destacado/rojo), descartando los ganchos de precio por ración
+       ("La ración de ... le sale a X,XX €") y los precios antiguos ("antes: XX,XX €").
+    4. Detección de unidad correcta ('ud' para 'La unidad le sale a: XX,XX €' o 'XX,XX €/u', 'kg' para 'XX,XX €/kg').
+    """
+
+    def __init__(self, save_output: bool = False):
+        super().__init__()
+        self.save_output = save_output
+
+    def extract(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Archivo PDF no encontrado: {file_path}")
+
+        print(f"📑 [AbordoPdfExtractor] Procesando catálogo Abordo con motor espacial: {file_path}")
+        reader = PdfReader(path)
+        products: List[Dict[str, Any]] = []
+
+        if self.detected_supplier is None and len(reader.pages) > 0:
+            self.detected_supplier = detect_supplier_from_pdf(reader, path)
+
+        UNIT_MAP = {
+            'kilo': 'kg', 'kilos': 'kg', 'uds': 'ud', 'unidad': 'ud', 'unidades': 'ud',
+            'cajas': 'caja', 'bolsas': 'bolsa', 'estuches': 'estuche', 'tarrinas': 'tarrina', 'u': 'ud'
+        }
+
+        for page_idx, page in enumerate(reader.pages, start=1):
+            page_width = float(page.mediabox.width) if hasattr(page, 'mediabox') and page.mediabox else 595.0
+            midpoint = page_width / 2.0
+            elements = []
+
+            def visitor(text, cm, tm, font_dict, font_size):
+                t = text.strip()
+                if t:
+                    elements.append({
+                        'x': round(tm[4], 1),
+                        'y': round(tm[5], 1),
+                        'text': t,
+                        'size': font_size
+                    })
+
+            page.extract_text(visitor_text=visitor)
+
+            filtered = [e for e in elements if 25.0 < e['y'] < 800.0]
+
+            anchors = []
+            for e in filtered:
+                m = re.search(r'\b(C-\d{3,5})\b', e['text'])
+                if m:
+                    anchors.append({'code': m.group(1), 'x': e['x'], 'y': e['y']})
+
+            left_anchors = sorted([a for a in anchors if a['x'] < midpoint], key=lambda a: -a['y'])
+            right_anchors = sorted([a for a in anchors if a['x'] >= midpoint], key=lambda a: -a['y'])
+
+            for col_anchors, is_left in [(left_anchors, True), (right_anchors, False)]:
+                for i, a in enumerate(col_anchors):
+                    cy = a['y']
+                    # Delimitación superior e inferior de la tarjeta
+                    top_y = cy + 8.0
+                    bottom_y = (col_anchors[i+1]['y'] + 6.0) if (i + 1 < len(col_anchors)) else max(25.0, cy - 140.0)
+
+                    card_elems = [
+                        e for e in filtered
+                        if (e['x'] < midpoint if is_left else e['x'] >= midpoint)
+                        and bottom_y <= e['y'] <= top_y
+                    ]
+
+                    # 1. Título del producto: línea del código anclaje
+                    title_elems = sorted([e for e in card_elems if abs(e['y'] - cy) <= 4.0 and e['x'] >= a['x']], key=lambda e: e['x'])
+                    title_1 = ' '.join(e['text'] for e in title_elems)
+                    title_1 = re.sub(r'\bC-\d{3,5}\b', '', title_1).strip(' ·-,')
+
+                    # Posible continuación del título en la línea inmediatamente inferior (subline)
+                    sub_elems = sorted(
+                        [e for e in card_elems if (cy - 16.0) <= e['y'] <= (cy - 8.0) and abs(e['x'] - a['x']) < 180.0],
+                        key=lambda e: e['x']
+                    )
+                    sub_text = ' '.join(e['text'] for e in sub_elems)
+                    sub_title = re.sub(r'\([^)]+\)', '', sub_text).strip(' ·-,')
+
+                    if sub_title and not any(k in sub_title.lower() for k in ['caja', 'el kg', 'le sale', 'antes', 'bolsa', 'estuche', 'pata', 'kg/pza']):
+                        full_title = f"{title_1} {sub_title}".strip()
+                    else:
+                        full_title = title_1
+
+                    # 2. Formato de presentación
+                    fmt = ''
+                    for e in card_elems:
+                        m_caja = re.search(r'(Caja:\s*[^/\n]+)', e['text'], re.I)
+                        if m_caja:
+                            fmt = m_caja.group(1).strip()
+                            break
+                        m_est = re.search(r'(Estuche\s*[^/\n]+|Bolsa\s*[^/\n]+|Tarrina\s*[^/\n]+)', e['text'], re.I)
+                        if m_est:
+                            fmt = m_est.group(1).strip()
+                            break
+                    if fmt:
+                        fmt = fmt.rstrip(')')
+
+                    # 3. Precio y Unidad
+                    card_sorted = sorted(card_elems, key=lambda e: (-e['y'], e['x']))
+                    full_card_text = ' '.join(e['text'] for e in card_sorted)
+
+                    price = 0.0
+                    unit = 'kg'
+
+                    # Caso A: Precio unitario ("La unidad le sale a: XX,XX €")
+                    m_unit = re.search(r'(\d+[.,]\d{2})\s*€?\s*(?:La\s+)?unidad\s+le\s+sale\s+a', full_card_text, re.I) or \
+                             re.search(r'(?:La\s+)?unidad\s+le\s+sale\s+a:?\s*(\d+[.,]\d{2})', full_card_text, re.I)
+                    if m_unit:
+                        price = float(m_unit.group(1).replace(',', '.'))
+                        unit = 'ud'
+                    else:
+                        # Limpiar precios antiguos ("antes: XX,XX") y ganchos de ración ("le sale a XX,XX")
+                        cleaned = re.sub(r'antes:\s*[\d.,]+\s*€?(?:/[a-z]+)?', '', full_card_text, flags=re.I)
+                        cleaned = re.sub(r'(?:ración|pata|pieza|kg|bolsa|estuche)\s+de[^\n€]*le\s+sale\s+a\s*[\d.,]+\s*€?', '', cleaned, flags=re.I)
+                        cleaned = re.sub(r'le\s+sale\s+a\s*[\d.,]+\s*€?', '', cleaned, flags=re.I)
+
+                        # Buscar precio de oferta con unidad explícita
+                        m_price = re.search(r'(\d+[.,]\d{2})\s*€\s*/?\s*(kg|kilo|kilos|u|ud|uds|unidad|unidades|caja|cajas|bolsa|bolsas|estuche|estuches|tarrina|tarrinas|bandeja|bandejas|sobre|sobres|lote|lotes|pack|packs)\b', cleaned, re.I)
+                        if m_price:
+                            price = float(m_price.group(1).replace(',', '.'))
+                            raw_u = m_price.group(2).lower()
+                            unit = UNIT_MAP.get(raw_u, raw_u)
+                        else:
+                            m_eur = re.search(r'(\d+[.,]\d{2})\s*€', cleaned, re.I)
+                            if m_eur:
+                                price = float(m_eur.group(1).replace(',', '.'))
+                                unit = 'kg'
+
+                    if full_title and price > 0:
+                        products.append({
+                            'page': page_idx,
+                            'supplier_product_code': a['code'],
+                            'raw_name': full_title,
+                            'format': fmt,
+                            'price': price,
+                            'unit': unit
+                        })
+
+        if self.save_output:
+            output_dir = Path("data/processed")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_file = output_dir / f"{path.stem}_extracted.json"
+            output_file.write_text(json.dumps(products, ensure_ascii=False, indent=2))
+            print(f"💾 Respaldo JSON guardado en: {output_file}")
+
+        print(f"✅ [AbordoPdfExtractor] Se extrajeron {len(products)} productos estructurados.")
+        return products
+
+
+# ==============================================================================
 # 5. ESTRATEGIA PDF TABULAR (Para listas de precios y albaranes convencionales en PDF)
 # ==============================================================================
 
@@ -749,11 +912,15 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
         duplicate_coords = 0
         seen_coords = set()
         is_dialva = False
+        is_abordo = False
 
         for p in sample_pages:
             txt = p.extract_text() or ""
-            if "dialva" in txt.lower():
+            txt_lower = txt.lower()
+            if "dialva" in txt_lower:
                 is_dialva = True
+            if "abordo" in txt_lower or "servifrio" in txt_lower or "servifrío" in txt_lower:
+                is_abordo = True
             # Contar anclajes de código tanto en el texto extraído como en tokens
             code_count += len(re.findall(r'[C|c][:.-]?\s*\d{3,5}', txt))
 
@@ -787,9 +954,13 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
                         has_coord_table += 1
 
         # Selección de estrategia según huella espacial
-        if is_dialva or "dialva" in path.stem.lower():
+        stem_lower = path.stem.lower()
+        if is_dialva or "dialva" in stem_lower:
             print("🎯 [UniversalPdfExtractor] Detectado catálogo de DIALVA Hostelería. Usando DialvaPdfExtractor...")
             engine = DialvaPdfExtractor()
+        elif is_abordo or "abordo" in stem_lower or "servifrio" in stem_lower or "servifrío" in stem_lower:
+            print("🎯 [UniversalPdfExtractor] Detectado catálogo de Abordo Hostelería / Servifrío. Usando AbordoPdfExtractor...")
+            engine = AbordoPdfExtractor()
         elif code_count >= 3:
             print(f"🎯 [UniversalPdfExtractor] Detectado catálogo de tarjetas por código ({code_count} anclajes C-XXXX). Usando SpatialCardPdfExtractor...")
             engine = SpatialCardPdfExtractor(
@@ -974,6 +1145,8 @@ class ExtractorFactory:
         ("excel", "prov_paco_01"): GenericExcelExtractor,
         ("pdf", "prov_dialva_04"): DialvaPdfExtractor,
         ("pdf", "dialva"): DialvaPdfExtractor,
+        ("pdf", "prov_abordo_02"): AbordoPdfExtractor,
+        ("pdf", "abordo"): AbordoPdfExtractor,
         ("pdf", "gemini"): GeminiMultimodalPdfExtractor,
         ("pdf", "auto"): UniversalPdfExtractor,
         ("pdf", "nuevo"): UniversalPdfExtractor,
@@ -1004,6 +1177,12 @@ class ExtractorFactory:
         # 2. Si el proveedor contiene 'dialva' o el archivo es el catálogo de Dialva
         if "dialva" in path.stem.lower() or (provider_id and "dialva" in provider_id.lower()):
             return DialvaPdfExtractor()
+
+        # 2.1. Si el proveedor contiene 'abordo' o 'servifrio' o el archivo es de Abordo
+        if any(k in path.stem.lower() for k in ["abordo", "servifrio", "servifrío"]) or (
+            provider_id and any(k in provider_id.lower() for k in ["abordo", "servifrio", "servifrío"])
+        ):
+            return AbordoPdfExtractor()
 
         # 3. Fallback genérico por tipo de archivo
         if (file_type, None) in cls._REGISTRY:
