@@ -651,7 +651,8 @@ def create_order(
                         from email.message import EmailMessage
                         msg = EmailMessage()
                         msg["Subject"] = f"Pedido F&B SmartOrder - {s_name}"
-                        msg["From"] = os.getenv("SMTP_FROM", "pedidos@restaurante.com")
+                        msg["From"] = os.getenv("SMTP_FROM", u_email)
+                        msg["Reply-To"] = u_email
                         msg["To"] = v.get("supplier_email") or "pedidos@proveedor.com"
                         msg.set_content(wa_text)
                         smtp_port = int(os.getenv("SMTP_PORT", 587))
