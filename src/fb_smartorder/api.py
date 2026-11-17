@@ -667,9 +667,9 @@ def create_order(
                         v["email_dispatched"] = True
                         v["email_status"] = "enviado_smtp"
                     else:
-                        print(f"📧 [EMAIL BACKEND] Pedido enviado automáticamente por servidor a {v.get('supplier_email')}")
-                        v["email_dispatched"] = True
-                        v["email_status"] = "enviado_servidor"
+                        print(f"ℹ️ [EMAIL BACKEND] No hay SMTP_HOST configurado. Se delega el envío por Email al cliente para {v.get('supplier_email')}")
+                        v["email_dispatched"] = False
+                        v["email_status"] = "pendiente_cliente"
                 except Exception as mail_err:
                     print(f"⚠️ Error enviando email: {mail_err}")
                     v["email_dispatched"] = False

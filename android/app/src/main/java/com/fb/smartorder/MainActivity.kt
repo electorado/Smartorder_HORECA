@@ -437,10 +437,9 @@ class MainActivity : AppCompatActivity() {
 
         val dispatchedSet = mutableSetOf<String>()
 
-        // Los que sean EMAIL ya vienen despachados automáticamente por el backend (Opción C)
+        // Solo los que hayan sido despachados automáticamente por SMTP en el backend
         for (so in suborders) {
-            val isEmail = so.preferredChannel?.lowercase() == "email" || so.emailDispatched == true
-            if (isEmail) {
+            if (so.emailDispatched == true) {
                 dispatchedSet.add(so.supplierId ?: so.supplierName)
             }
         }
