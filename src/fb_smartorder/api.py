@@ -444,7 +444,8 @@ async def upload_catalog(
             raise HTTPException(status_code=400, detail="Formato no soportado. Debe ser .pdf, .xlsx o .xls.")
 
         # 1. Guardar temporalmente para la extracción
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+        clean_prefix = re.sub(r'[^a-zA-Z0-9_\-]', '_', os.path.splitext(filename)[0])[:30]
+        with tempfile.NamedTemporaryFile(delete=False, prefix=f"{clean_prefix}_", suffix=ext) as tmp:
             tmp.write(file_bytes)
             tmp_path = tmp.name
 

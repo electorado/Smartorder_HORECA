@@ -904,9 +904,14 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
     def extract(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
         path = Path(file_path)
         reader = PdfReader(path)
-        sample_pages = reader.pages[:min(3, len(reader.pages))]
+        num_pages = len(reader.pages)
+        sample_pages = []
+        sample_pages.extend(reader.pages[:min(3, num_pages)])
+        if num_pages > 3:
+            sample_pages.extend(reader.pages[max(3, num_pages - 2):])
         
         code_count = 0
+        c_hyphen_count = 0
         has_coord_table = 0
         multi_price_lines = 0
         duplicate_coords = 0
@@ -923,6 +928,7 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
                 is_abordo = True
             # Contar anclajes de código tanto en el texto extraído como en tokens
             code_count += len(re.findall(r'[C|c][:.-]?\s*\d{3,5}', txt))
+            c_hyphen_count += len(re.findall(r'\bC-\d{3,5}\b', txt))
 
             for l in txt.split("\n"):
                 l = l.strip()
@@ -958,7 +964,7 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
         if is_dialva or "dialva" in stem_lower:
             print("🎯 [UniversalPdfExtractor] Detectado catálogo de DIALVA Hostelería. Usando DialvaPdfExtractor...")
             engine = DialvaPdfExtractor()
-        elif is_abordo or "abordo" in stem_lower or "servifrio" in stem_lower or "servifrío" in stem_lower:
+        elif is_abordo or any(k in stem_lower for k in ["abordo", "servifrio", "servifrío"]) or c_hyphen_count >= 3:
             print("🎯 [UniversalPdfExtractor] Detectado catálogo de Abordo Hostelería / Servifrío. Usando AbordoPdfExtractor...")
             engine = AbordoPdfExtractor()
         elif code_count >= 3:
