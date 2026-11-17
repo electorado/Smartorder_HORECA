@@ -13,6 +13,8 @@ object RetrofitClient {
     private var activeBaseUrl: String? = null
     private var cachedApiService: ApiService? = null
 
+    const val CLOUD_DEFAULT_URL = "https://smartorder-api-z4or.onrender.com/"
+
     fun getBaseUrl(context: Context? = null): String {
         if (!activeBaseUrl.isNullOrEmpty()) {
             return activeBaseUrl!!
@@ -26,17 +28,8 @@ object RetrofitClient {
             }
         }
 
-        val isEmulator = (android.os.Build.FINGERPRINT.startsWith("generic")
-                || android.os.Build.FINGERPRINT.startsWith("unknown")
-                || android.os.Build.FINGERPRINT.contains("emu")
-                || android.os.Build.MODEL.contains("google_sdk")
-                || android.os.Build.MODEL.contains("Emulator")
-                || android.os.Build.MODEL.contains("sdk")
-                || android.os.Build.MODEL.contains("Android SDK built for x86")
-                || android.os.Build.HARDWARE.contains("goldfish")
-                || android.os.Build.HARDWARE.contains("ranchu"))
-        // En emulador 10.0.2.2; en dispositivo físico real con 'adb reverse' 127.0.0.1
-        activeBaseUrl = if (isEmulator) "http://10.0.2.2:8000/" else "http://127.0.0.1:8000/"
+        // Por defecto conectar a la API Cloud en Render para funcionamiento universal en cualquier teléfono
+        activeBaseUrl = CLOUD_DEFAULT_URL
         return activeBaseUrl!!
     }
 

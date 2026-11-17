@@ -17,6 +17,7 @@ object SessionManager {
     private const val KEY_CHEF_NAME = "key_chef_name"
     private const val KEY_RESTAURANT_NAME = "key_restaurant_name"
     private const val KEY_SERVER_URL = "key_server_url"
+    const val DEFAULT_SERVER_URL = "https://smartorder-api-z4or.onrender.com/"
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -47,7 +48,8 @@ object SessionManager {
     }
 
     fun getServerUrl(context: Context): String {
-        return getPrefs(context).getString(KEY_SERVER_URL, "") ?: ""
+        val saved = getPrefs(context).getString(KEY_SERVER_URL, "") ?: ""
+        return if (saved.isNotBlank()) saved else DEFAULT_SERVER_URL
     }
 
     fun setServerUrl(context: Context, serverUrl: String) {
