@@ -213,7 +213,7 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
 
     def __init__(
         self,
-        anchor_regex: str = r'[C|c][:.]?\s*(\d{3,5})',
+        anchor_regex: str = r'[C|c][:.-]?\s*(\d{3,5})',
         ignored_section_headers: Optional[Set[str]] = None,
         noise_phrases: Optional[List[str]] = None,
         x_tolerance: float = 190.0,
@@ -793,7 +793,7 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
         elif code_count >= 3:
             print(f"🎯 [UniversalPdfExtractor] Detectado catálogo de tarjetas por código ({code_count} anclajes C-XXXX). Usando SpatialCardPdfExtractor...")
             engine = SpatialCardPdfExtractor(
-                anchor_regex=r'[C|c][:.]?\s*(\d{3,5})',
+                anchor_regex=r'[C|c][:.-]?\s*(\d{3,5})',
                 header_y_limit=950.0,
                 y_above=85.0,
                 y_below=80.0,
