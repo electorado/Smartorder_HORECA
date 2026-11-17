@@ -1,9 +1,15 @@
 import os
+import hashlib
+from datetime import datetime
 from dotenv import load_dotenv
 from pymongo import MongoClient
 import gridfs
 
-load_dotenv()
+load_dotenv(override=True)
+
+def hash_password(password: str) -> str:
+    """Calcula el hash SHA-256 de una contraseña."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 def get_db_client():
     """Inicializa y devuelve el cliente utilizando MONGO_URI (Atlas) o variables locales (Docker)."""
@@ -117,7 +123,17 @@ def init_db(db_name="fb_smartorder"):
         for ing in master_seeds:
             db["ingredientes_maestros"].update_one({"id": ing["id"]}, {"$set": ing}, upsert=True)
 
-            
+        # Semilla e índice de usuarios
+        db["usuarios"].create_index([("email", 1)], unique=True)
+        if db["usuarios"].count_documents({"email": "pablo@horeca.com"}) == 0:
+            db["usuarios"].insert_one({
+                "name": "Pablo Moncayo",
+                "email": "pablo@horeca.com",
+                "password_hash": hash_password("password123"),
+                "restaurant_name": "Restaurante El Faro",
+                "created_at": datetime.utcnow()
+            })
+
         return True
 
     except Exception as e:

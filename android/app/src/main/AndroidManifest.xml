@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
@@ -19,6 +20,24 @@
         tools:ignore="IconLocation"
         tools:targetApi="31">
 
+        <!-- Pantalla de Login / Configuración del Chef y Establecimiento -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Pantalla de Registro de Establecimiento / Cocinero -->
+        <activity
+            android:name=".RegisterActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Pantalla de Perfil de Usuario y Ajustes (Ruedita ⚙️) -->
+        <activity
+            android:name=".ProfileActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Pantalla de Bienvenida / Landing & Menú Principal -->
         <activity
             android:name=".LandingActivity"
@@ -32,17 +51,31 @@
         <!-- Pantalla de Selección de Catálogo y Pedido -->
         <activity
             android:name=".MainActivity"
-            android:exported="false" />
+            android:launchMode="singleTop"
+            android:exported="true" />
 
         <!-- Historial de Pedidos -->
         <activity
             android:name=".OrderHistoryActivity"
-            android:exported="false" />
+            android:launchMode="singleTop"
+            android:exported="true" />
 
         <!-- Directorio y Gestión de Proveedores -->
         <activity
             android:name=".SuppliersActivity"
-            android:exported="false" />
+            android:launchMode="singleTop"
+            android:exported="true" />
+
+        <!-- FileProvider para compartir y previsualizar Albaranes en PDF -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

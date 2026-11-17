@@ -8,6 +8,27 @@ import retrofit2.http.*
 
 interface ApiService {
 
+    @POST("api/v1/auth/login")
+    suspend fun login(
+        @Body req: UserLoginRequest
+    ): Response<AuthResponse>
+
+    @POST("api/v1/auth/register")
+    suspend fun register(
+        @Body req: UserRegisterRequest
+    ): Response<AuthResponse>
+
+    @GET("api/v1/auth/profile")
+    suspend fun getProfile(
+        @Query("email") email: String
+    ): Response<AuthResponse>
+
+    @PUT("api/v1/auth/profile")
+    suspend fun updateProfile(
+        @Query("email") email: String,
+        @Body req: UserUpdateRequest
+    ): Response<AuthResponse>
+
     @GET("api/v1/products")
     suspend fun getProducts(
         @Query("query") query: String? = null,
@@ -30,10 +51,16 @@ interface ApiService {
         @Body supplier: Supplier
     ): Response<Map<String, Any>>
 
+    @DELETE("api/v1/suppliers/{supplier_id}")
+    suspend fun deleteSupplier(
+        @Path("supplier_id") supplierId: String
+    ): Response<Map<String, Any>>
+
     @Multipart
     @POST("api/v1/catalogs/upload")
     suspend fun uploadCatalog(
         @Part("supplier_id") supplierId: RequestBody,
+        @Part("is_annex") isAnnex: RequestBody,
         @Part file: MultipartBody.Part
     ): Response<CatalogUploadResponse>
 

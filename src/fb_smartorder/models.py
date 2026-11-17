@@ -77,6 +77,8 @@ class SupplierSubOrder(BaseModel):
     subtotal: float
     whatsapp_url: Optional[str] = None
     whatsapp_text: Optional[str] = None
+    email_dispatched: Optional[bool] = False
+    email_status: Optional[str] = None
 
     def recalculate_subtotal(self) -> float:
         """Recalcula la suma de subtotales de las líneas del subpedido."""
@@ -119,3 +121,32 @@ class Order(BaseModel):
     def export_order_sheet(self) -> dict:
         """Exporta el pedido a un diccionario serializable."""
         return self.model_dump()
+
+
+# ==============================================================================
+# Modelos de Autenticación y Perfil de Usuario
+# ==============================================================================
+
+class UserRegister(BaseModel):
+    name: str = Field(..., description="Nombre del cocinero / responsable")
+    email: str = Field(..., description="Email de acceso")
+    password: str = Field(..., min_length=4, description="Contraseña de acceso")
+    restaurant_name: str = Field(..., description="Nombre del restaurante")
+
+class UserLogin(BaseModel):
+    email: str = Field(..., description="Email de acceso")
+    password: str = Field(..., description="Contraseña de acceso")
+
+class UserProfile(BaseModel):
+    id: Optional[str] = None
+    name: str
+    email: str
+    restaurant_name: str
+    created_at: Optional[datetime] = None
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    restaurant_name: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+

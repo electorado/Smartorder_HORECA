@@ -3,7 +3,9 @@ package com.fb.smartorder
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import com.fb.smartorder.data.network.RetrofitClient
 import com.fb.smartorder.databinding.ActivityLandingBinding
+import com.fb.smartorder.util.SessionManager
 
 class LandingActivity : AppCompatActivity() {
 
@@ -11,13 +13,55 @@ class LandingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 1. Verificar si hay sesión iniciada
+        if (!SessionManager.isLoggedIn(this)) {
+            val intent = Intent(this, LoginActivity::class.java)
+            startActivity(intent)
+            finish()
+            return
+        }
+
         binding = ActivityLandingBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Sincronizar URL guardada con RetrofitClient
+        val savedServer = SessionManager.getServerUrl(this)
+        if (savedServer.isNotBlank()) {
+            RetrofitClient.updateBaseUrl(savedServer)
+        }
+
+        updateChefProfileUI()
         setupListeners()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::binding.isInitialized) {
+            updateChefProfileUI()
+        }
+    }
+
+    private fun updateChefProfileUI() {
+        val chef = SessionManager.getChefName(this)
+        val restaurant = SessionManager.getRestaurantName(this)
+        binding.tvChefName.text = "Chef en Turno: $chef"
+        binding.tvServerStatus.text = "$restaurant · Perfil activo (toca para cambiar)"
+    }
+
     private fun setupListeners() {
+        // ⚙️ Ruedita superior de Ajustes / Perfil
+        binding.btnLandingSettings.setOnClickListener {
+            val intent = Intent(this, ProfileActivity::class.java)
+            startActivity(intent)
+        }
+
+        // Tocar tarjeta de perfil para ver o editar datos
+        binding.layoutChefCard.setOnClickListener {
+            val intent = Intent(this, ProfileActivity::class.java)
+            startActivity(intent)
+        }
+
         // 1. Nuevo Pedido -> Abre el catálogo y panel de selección
         binding.btnMenuNewOrder.setOnClickListener {
             val intent = Intent(this, MainActivity::class.java)
@@ -45,4 +89,3 @@ class LandingActivity : AppCompatActivity() {
         }
     }
 }
-
