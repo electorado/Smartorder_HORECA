@@ -741,28 +741,43 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 var matchedCount = 0
-                val addedOffCatalog = mutableListOf<String>()
+                val unmatchedNames = mutableListOf<String>()
 
                 for ((idx, item) in items.withIndex()) {
                     val mId = item.masterIngredientId
                     val qty = item.quantity.toInt().coerceAtLeast(1)
-                    if (!mId.isNullOrEmpty() && catalogAdapter.getProductById(mId) != null) {
-                        catalogAdapter.setProductQuantity(mId, qty)
+                    val prodId = item.bestOffer?.productId
+
+                    // 1. Buscar en el catálogo local por product_id o por masterIngredientId
+                    val catalogProd = if (!prodId.isNullOrEmpty()) {
+                        catalogAdapter.getProductById(prodId)
+                    } else if (!mId.isNullOrEmpty()) {
+                        catalogAdapter.getProductById(mId)
+                    } else null
+
+                    if (catalogProd != null) {
+                        catalogAdapter.setProductQuantity(catalogProd.id, qty)
                         matchedCount++
-                    } else {
-                        val offName = item.cleanName ?: item.rawText
-                        val customProd = Product(
-                            id = "custom_scan_${System.currentTimeMillis()}_$idx",
+                    } else if (item.bestOffer != null && (item.bestOffer.price ?: 0.0) > 0.0) {
+                        // El backend encontró una oferta real con precio y proveedor en el catálogo
+                        val offName = item.bestOffer.rawName ?: item.cleanName ?: item.rawText
+                        val matchedProd = Product(
+                            id = prodId ?: "scan_matched_${System.currentTimeMillis()}_$idx",
                             name = offName,
-                            category = "Nota Manuscrita",
-                            standardUnit = item.unit ?: "kg",
-                            bestPrice = item.bestOffer?.price ?: 0.0,
-                            bestSupplierId = item.bestOffer?.supplierId ?: "prov_dialva_04",
-                            bestSupplierName = item.bestOffer?.supplierName ?: "DIALVA Hostelería S.L.",
+                            category = item.bestOffer.category ?: "Catálogo",
+                            standardUnit = item.bestOffer.unit ?: item.unit ?: "kg",
+                            bestPrice = item.bestOffer.price,
+                            bestSupplierId = item.bestOffer.supplierId,
+                            bestSupplierName = item.bestOffer.supplierName,
                             availableOffers = 1
                         )
-                        catalogAdapter.addCustomProduct(customProd, qty)
-                        addedOffCatalog.add(offName)
+                        catalogAdapter.addCustomProduct(matchedProd, qty)
+                        matchedCount++
+                    } else {
+                        // Ítem no encontrado en ningún catálogo ni con precio:
+                        // No lo forzamos a la comanda con Dialva ni con 0€ para no molestar al cocinero
+                        val unmatchName = item.cleanName ?: item.rawText
+                        unmatchedNames.add(unmatchName)
                     }
                 }
 
@@ -771,17 +786,19 @@ class MainActivity : AppCompatActivity() {
                 refreshOrderView()
 
                 val summaryMsg = StringBuilder()
-                summaryMsg.append("Se han añadido ${items.size} ítems reconocidos a tu comanda:\n")
                 if (matchedCount > 0) {
-                    summaryMsg.append("• $matchedCount productos del catálogo asignados.\n")
+                    summaryMsg.append("✅ Se han añadido $matchedCount productos encontrados en tus catálogos a la comanda.\n\n")
+                } else {
+                    summaryMsg.append("ℹ️ No se encontraron productos de la foto en tus catálogos actuales.\n\n")
                 }
-                if (addedOffCatalog.isNotEmpty()) {
-                    summaryMsg.append("• ${addedOffCatalog.size} ítems manuscritos fuera de catálogo.\n")
+
+                if (unmatchedNames.isNotEmpty()) {
+                    summaryMsg.append("⚠️ Ítems de la foto no encontrados en tus catálogos (no añadidos para no ensuciar el pedido):\n")
+                    unmatchedNames.forEach { summaryMsg.append(" • $it\n") }
                 }
-                summaryMsg.append("\nPuedes ajustar cantidades o añadir más productos antes de enviar.")
 
                 AlertDialog.Builder(this)
-                    .setTitle("Digitalización completada ✅")
+                    .setTitle("Digitalización completada 📋")
                     .setMessage(summaryMsg.toString())
                     .setPositiveButton("Ver Comanda", null)
                     .show()

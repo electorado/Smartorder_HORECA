@@ -661,10 +661,33 @@ async def scan_fridge_photo(file: UploadFile = File(...)):
             m_id = item.get("master_ingredient_id")
             best_offer = None
             if m_id:
-                offers = list(db["productos_brutos"].find({"master_ingredient_id": m_id}, {"_id": 0}))
-                offers.sort(key=lambda x: x.get("price", 99999.0))
-                best_offer = offers[0] if offers else None
-            
+                raw_offers = list(db["productos_brutos"].find({"master_ingredient_id": m_id}))
+                raw_offers.sort(key=lambda x: x.get("canonical_price") or x.get("price", 99999.0))
+                if raw_offers:
+                    best = raw_offers[0]
+                    p_id = str(best["_id"])
+                    del best["_id"]
+                    best["product_id"] = p_id
+                    best_offer = best
+
+            # Fallback a búsqueda directa por nombre en productos_brutos
+            if not best_offer and item.get("raw_name"):
+                name_clean = re.sub(r'[^a-zA-ZáéíóúñÁÉÍÓÚÑ\s]', '', item.get("raw_name")).strip()
+                if len(name_clean) >= 3:
+                    name_query = {"$or": [
+                        {"raw_name": {"$regex": re.escape(name_clean), "$options": "i"}},
+                        {"clean_name": {"$regex": re.escape(name_clean), "$options": "i"}}
+                    ]}
+                    candidates = list(db["productos_brutos"].find(name_query))
+                    if candidates:
+                        candidates.sort(key=lambda x: x.get("canonical_price") or x.get("price", 99999.0))
+                        best = candidates[0]
+                        p_id = str(best["_id"])
+                        del best["_id"]
+                        best["product_id"] = p_id
+                        best_offer = best
+                        m_id = best.get("master_ingredient_id")
+
             suggested_order_items.append({
                 "raw_text": item.get("raw_name"),
                 "clean_name": item.get("clean_name"),

@@ -368,6 +368,7 @@ class TabularPdfExtractor(BaseCatalogExtractor):
             company_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:S\.L\.|S\.A\.|C\.B\.|S\.L\.U\.|S\.C\.|S\.A\.U\.))', full_text)
             if company_m:
                 supp_name = re.sub(r'[\r\n]+', ' ', company_m.group(1)).strip()
+                supp_name = re.sub(r'\s+', ' ', supp_name).strip()
                 supp_name = re.sub(r'^[\s.,;:-]+|[\s.,;:-]+$', '', supp_name)
             
             if not supp_name:
@@ -382,11 +383,21 @@ class TabularPdfExtractor(BaseCatalogExtractor):
                 "email": email
             }
 
+        # Patrones de ruido a descartar en PDFs administrativos
+        noise_patterns = [
+            re.compile(r'^(?:nombre|precio|medida|código|articulo|producto|tarifa|total|subtotal|pág|fecha)', re.I),
+            re.compile(r'(?:c\.b\.|s\.l\.|s\.a\.|tel[ée]fono|whatsapp|reparto|contacto|@|domicilio|horario)', re.I),
+            re.compile(r'^(?:lista de precios|verdura|fruta)', re.I)
+        ]
+
+        # Patrón flexible que captura líneas que terminan en precio y unidad opcional
+        # Soporta: 'ACELGAS MANOJO 1,25€ KILO', 'CALABAZA 2,80 KILO', 'PATATA FREIR 1€ KILO', 'SOLOMILLO 24,50 €/KG', etc.
         line_pattern = re.compile(
-            r'^\s*(?:([A-Za-z0-9_-]+)\s+)?'             # Código opcional
-            r'([A-Za-zÁÉÍÓÚáéíóúÑñ0-9\s/.,\-+ªº]+?)\s+' # Nombre producto
-            r'(\d+[.,]\d{2})\s*'                         # Precio numérico
-            r'(?:€\s*(?:/\s*([a-záéíóúA-Z]+))?|€)?\s*$' # Unidad opcional tras €
+            r'^(?P<content>.+?)\s+'
+            r'(?P<price>\d+(?:[.,]\d{1,2})?)\s*'
+            r'€?\s*(?:/\s*)?'
+            r'(?P<unit>[a-záéíóúA-Z]+)?\s*$',
+            re.I
         )
         subitem_pattern = re.compile(
             r'^\s*([A-Za-zÁÉÍÓÚáéíóúÑñ0-9\s/.,\-+ªº()]+?)\s+(\d+(?:[.,]\d+)?\s*(?:kg|ud|k))\s*$',
@@ -404,22 +415,40 @@ class TabularPdfExtractor(BaseCatalogExtractor):
                 line = line.strip()
                 if not line or len(line) < 3:
                     continue
+                if any(p.search(line) for p in noise_patterns):
+                    continue
+
                 m = line_pattern.match(line)
                 if m:
-                    code, name, price_str, unit = m.groups()
+                    content = m.group("content").strip()
+                    price_str = m.group("price").replace(",", ".")
+                    unit = (m.group("unit") or "ud").lower()
                     try:
-                        price = float(price_str.replace(",", "."))
-                        prod_dict = {
-                            "supplier_product_code": code or None,
-                            "raw_name": name.strip(),
-                            "price": price,
-                            "unit": (unit or "ud").lower(),
-                            "_subitems": []
-                        }
-                        products.append(prod_dict)
-                        current_bundle = prod_dict
+                        price = float(price_str)
                     except ValueError:
                         continue
+
+                    if price > 1000.0 or price <= 0.0:
+                        continue
+
+                    # Extraer código si el primer término es claramente un código (ej. REF01, 10023, C-12)
+                    tokens = content.split()
+                    first = tokens[0]
+                    code = None
+                    name = content
+                    if len(tokens) > 1 and (re.search(r'\d', first) or (len(first) <= 5 and first.isupper() and first.isalnum() and not any(v in first.lower() for v in ['ajo', 'sol', 'pan', 'uvas', 'lomo', 'pera', 'atun']))):
+                        code = first
+                        name = " ".join(tokens[1:])
+
+                    prod_dict = {
+                        "supplier_product_code": code,
+                        "raw_name": name.strip(),
+                        "price": price,
+                        "unit": unit,
+                        "_subitems": []
+                    }
+                    products.append(prod_dict)
+                    current_bundle = prod_dict
                 elif current_bundle is not None:
                     sub_m = subitem_pattern.match(line)
                     if sub_m:

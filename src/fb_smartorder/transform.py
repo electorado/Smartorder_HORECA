@@ -39,10 +39,11 @@ TAXONOMY_MAP = {
 
 # Cortes y formatos de carne / pescado reconocidos para evitar mezclar partes incompatibles
 KNOWN_CUTS = {
-    "solomillo", "chuletero", "chuleton", "chuleta", "lomo",
+    "solomillo", "chuletero", "chuleton", "chuleta", "chuletas", "lomo",
     "entrecot", "falda", "aguja", "carrillada", "churrasco",
     "secreto", "lagarto", "codillo", "cabecero", "picana",
-    "pechuga", "filete", "tartar", "hamburguesa"
+    "pechuga", "filete", "filetes", "tartar", "hamburguesa", "hamburguesas",
+    "costilla", "costillas", "alita", "alitas", "muslito", "muslitos", "jamoncito", "jamoncitos"
 }
 
 
@@ -70,7 +71,11 @@ def parse_product_structure(text: str):
     head_txt = parts[0].strip()
     head_tokens = clean_tokens(head_txt)
     all_tokens = clean_tokens(text)
-    head_cut = next((t for t in head_tokens if t in KNOWN_CUTS), None)
+    raw_cut = next((t for t in head_tokens if t in KNOWN_CUTS), None)
+    if raw_cut:
+        head_cut = raw_cut[:-1] if raw_cut.endswith("s") and len(raw_cut) > 4 else raw_cut
+    else:
+        head_cut = None
     return {
         "head_tokens": set(head_tokens),
         "all_tokens": set(all_tokens),
@@ -212,7 +217,7 @@ def normalize_metric_dimension(
 def resolve_entities(
     raw_products: List[Dict[str, Any]],
     master_ingredients: List[Dict[str, Any]],
-    threshold: float = 65.0
+    threshold: float = 60.0
 ) -> List[Dict[str, Any]]:
     """Algoritmo de Entity Resolution ontológico para F&B.
     
@@ -286,12 +291,25 @@ def resolve_entities(
                 continue
 
             # 3. El núcleo del producto maestro debe residir en el producto principal del proveedor
-            if m["root"] not in prod_struct["head_tokens"]:
+            def _tokens_affinity(t1, t2):
+                if t1 == t2:
+                    return True
+                if (t1.startswith(t2) or t2.startswith(t1)) and len(min(t1, t2, key=len)) >= 4:
+                    return True
+                if fuzz.ratio(t1, t2) >= 80:
+                    return True
+                return False
+
+            has_root_match = any(_tokens_affinity(t, m["root"]) for t in prod_struct["head_tokens"]) or \
+                             any(_tokens_affinity(t, mt) for t in prod_struct["head_tokens"] for mt in m["tokens"]) or \
+                             any(_tokens_affinity(t, mt) for t in prod_struct["all_tokens"] for mt in m["tokens"])
+
+            if not has_root_match:
                 continue
 
             # 4. Cálculo de coincidencia conceptual
-            overlap = prod_struct["all_tokens"] & m["tokens"]
-            coverage = len(overlap) / len(m["tokens"])
+            overlap_count = sum(1 for mt in m["tokens"] if any(_tokens_affinity(pt, mt) for pt in prod_struct["all_tokens"]))
+            coverage = overlap_count / max(len(m["tokens"]), 1)
             str_sim = fuzz.token_set_ratio(" ".join(prod_struct["all_tokens"]), " ".join(m["tokens"])) / 100.0
             
             # Ponderación: Presencia de raíz (40%) + Cobertura de conceptos (35%) + Similitud léxica (25%)

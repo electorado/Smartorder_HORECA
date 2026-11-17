@@ -3,11 +3,15 @@ package com.fb.smartorder.model
 import com.google.gson.annotations.SerializedName
 
 data class ScannedOffer(
-    @SerializedName("supplier_id") val supplierId: String?,
-    @SerializedName("supplier_name") val supplierName: String?,
-    @SerializedName("price") val price: Double?,
-    @SerializedName("canonical_price") val canonicalPrice: Double?,
-    @SerializedName("canonical_unit") val canonicalUnit: String?
+    @SerializedName("product_id") val productId: String? = null,
+    @SerializedName("raw_name") val rawName: String? = null,
+    @SerializedName("supplier_id") val supplierId: String? = null,
+    @SerializedName("supplier_name") val supplierName: String? = null,
+    @SerializedName("price") val price: Double? = null,
+    @SerializedName("canonical_price") val canonicalPrice: Double? = null,
+    @SerializedName("canonical_unit") val canonicalUnit: String? = null,
+    @SerializedName("category") val category: String? = null,
+    @SerializedName("unit") val unit: String? = null
 )
 
 data class ScannedItem(
