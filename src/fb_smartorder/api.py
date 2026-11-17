@@ -1,6 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
+from contextlib import asynccontextmanager
 import tempfile
 import os
 import re
@@ -17,10 +18,20 @@ from .extract import extract_excel, extract_pdf, extract_catalog, extract_catalo
 from .transform import resolve_entities
 from .load import load_raw_products, save_catalog_file
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Gestión moderna del ciclo de vida de FastAPI (sustituye al deprecado on_event)."""
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Advertencia al iniciar DB en startup: {e}")
+    yield
+
 app = FastAPI(
     title="F&B SmartOrder API",
     description="Backend API asíncrono para el procesamiento de catálogos y automatización de pedidos en Hostelería.",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -30,14 +41,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-def startup_db_check():
-    """Inicializa la base de datos al arrancar la API."""
-    try:
-        init_db()
-    except Exception as e:
-        print(f"Advertencia al iniciar DB en startup: {e}")
 
 @app.get("/")
 def read_root():
