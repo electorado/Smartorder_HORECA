@@ -406,8 +406,8 @@ def get_products(
 
             cat = p.get("category") or (master.get("category") if master else None) or "General"
             name = p.get("raw_name") or p.get("clean_name") or "Producto"
-            unit = p.get("canonical_unit") or p.get("unit") or "kg"
-            price = p.get("canonical_price") if p.get("canonical_price") is not None else p.get("price")
+            unit = p.get("unit") or p.get("canonical_unit") or "ud"
+            price = p.get("price") if p.get("price") is not None else p.get("canonical_price")
 
             products.append({
                 "id": p_id,
