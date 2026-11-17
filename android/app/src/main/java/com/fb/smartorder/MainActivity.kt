@@ -830,6 +830,10 @@ class MainActivity : AppCompatActivity() {
                         binding.tvEmptyMessage.visibility = View.GONE
                         binding.rvIngredients.visibility = View.VISIBLE
                         catalogAdapter.setProducts(state.products)
+                        val suppPairs = state.products
+                            .mapNotNull { if (!it.bestSupplierId.isNullOrEmpty() && !it.bestSupplierName.isNullOrEmpty()) Pair(it.bestSupplierId!!, it.bestSupplierName!!) else null }
+                            .distinctBy { it.first }
+                        setupSupplierFilterChips(suppPairs)
                         refreshOrderView()
                     }
                 }
@@ -842,6 +846,64 @@ class MainActivity : AppCompatActivity() {
                     binding.rvIngredients.visibility = View.GONE
                 }
             }
+        }
+    }
+
+    private var activeFilterSupplierId: String? = null
+
+    private fun setupSupplierFilterChips(suppliers: List<Pair<String, String>>) {
+        binding.layoutSupplierChips.removeAllViews()
+        if (suppliers.isEmpty()) {
+            binding.hsvSupplierFilter.visibility = View.GONE
+            return
+        }
+        binding.hsvSupplierFilter.visibility = View.VISIBLE
+
+        val allItems = mutableListOf<Pair<String?, String>>(Pair(null, "📦 Todos"))
+        suppliers.forEach { allItems.add(Pair(it.first, it.second)) }
+
+        for (item in allItems) {
+            val suppId = item.first
+            val suppName = item.second
+            val isSelected = suppId == activeFilterSupplierId
+
+            val chipView = TextView(this).apply {
+                text = suppName
+                textSize = 12f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(26, 12, 26, 12)
+                val params = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    setMargins(6, 0, 6, 0)
+                }
+                layoutParams = params
+
+                updateChipStyle(this, isSelected)
+
+                setOnClickListener {
+                    activeFilterSupplierId = suppId
+                    catalogAdapter.filterBySupplier(suppId)
+                    for (i in 0 until binding.layoutSupplierChips.childCount) {
+                        val child = binding.layoutSupplierChips.getChildAt(i) as? TextView
+                        val childSelected = (child?.tag as? String) == suppId
+                        if (child != null) updateChipStyle(child, childSelected)
+                    }
+                }
+                tag = suppId
+            }
+            binding.layoutSupplierChips.addView(chipView)
+        }
+    }
+
+    private fun updateChipStyle(tv: TextView, isSelected: Boolean) {
+        if (isSelected) {
+            tv.setBackgroundResource(R.drawable.bg_btn_retro)
+            tv.setTextColor(getColor(R.color.white))
+        } else {
+            tv.setBackgroundResource(R.drawable.bg_btn_secondary_retro)
+            tv.setTextColor(getColor(R.color.text_primary))
         }
     }
 }

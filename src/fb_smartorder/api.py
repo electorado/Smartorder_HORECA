@@ -230,6 +230,37 @@ def create_or_update_supplier(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error guardando proveedor: {str(e)}")
 
+@app.put("/api/v1/suppliers/{supplier_id}")
+def update_supplier(
+    supplier_id: str,
+    supplier: Supplier,
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Actualiza los datos de contacto de un proveedor existente y sincroniza su catálogo."""
+    try:
+        db = get_database()
+        u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
+        supp_dict = supplier.model_dump()
+        supp_dict["id"] = supplier_id
+        supp_dict["user_email"] = u_email
+        db["proveedores"].update_one(
+            {"id": supplier_id, "user_email": u_email},
+            {"$set": supp_dict},
+            upsert=True
+        )
+        if supp_dict.get("name"):
+            db["productos_brutos"].update_many(
+                {"supplier_id": supplier_id, "user_email": u_email},
+                {"$set": {"supplier_name": supp_dict["name"]}}
+            )
+        return {
+            "message": f"Proveedor '{supp_dict['name']}' actualizado correctamente.",
+            "supplier": supp_dict
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error actualizando proveedor: {str(e)}")
+
 @app.delete("/api/v1/suppliers/{supplier_id}")
 def delete_supplier(
     supplier_id: str,
@@ -503,7 +534,7 @@ def create_order(
             if s_id not in grouped:
                 supp = db["proveedores"].find_one({"id": s_id})
                 s_name = item.supplier_name or (supp.get("name") if supp else s_id)
-                s_email = supp.get("email", "pedidos@proveedor.com") if supp else "pedidos@proveedor.com"
+                s_email = supp.get("email") if supp else None
                 s_phone = supp.get("phone") if supp else None
                 s_pref = supp.get("preferred_channel", "whatsapp") if supp else "whatsapp"
                 grouped[s_id] = {

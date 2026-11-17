@@ -414,6 +414,25 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <!-- Filtro Horizontal por Proveedor -->
+        <HorizontalScrollView
+            android:id="@+id/hsvSupplierFilter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="4dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/layoutSupplierChips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="2dp"
+                android:paddingEnd="2dp" />
+        </HorizontalScrollView>
+
         <!-- Contenedor Lista o Estado Vacío de Catálogo -->
         <FrameLayout
             android:layout_width="match_parent"

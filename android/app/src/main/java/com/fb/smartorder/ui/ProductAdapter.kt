@@ -17,6 +17,7 @@ class ProductAdapter(
     private val selectedIds = mutableSetOf<String>()
     var showOnlySelected: Boolean = false
     private var currentQuery: String = ""
+    private var selectedSupplierId: String? = null
 
     fun setProducts(products: List<Product>) {
         fullList.clear()
@@ -33,6 +34,11 @@ class ProductAdapter(
 
     fun filter(query: String) {
         currentQuery = query
+        applyFilters()
+    }
+
+    fun filterBySupplier(supplierId: String?) {
+        selectedSupplierId = supplierId
         applyFilters()
     }
 
@@ -75,7 +81,8 @@ class ProductAdapter(
                 }
 
                 val matchesSelection = !showOnlySelected || ((quantities[prod.id] ?: 0) > 0 && selectedIds.contains(prod.id))
-                matchesQuery && matchesSelection
+                val matchesSupplier = selectedSupplierId == null || prod.bestSupplierId == selectedSupplierId
+                matchesQuery && matchesSelection && matchesSupplier
             }
         )
         notifyDataSetChanged()

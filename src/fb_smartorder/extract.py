@@ -119,6 +119,73 @@ class GenericExcelExtractor(BaseCatalogExtractor):
         return products
 
 
+def detect_supplier_from_pdf(reader: PdfReader, path: Path) -> Dict[str, Any]:
+    """Extrae metadatos de proveedor examinando portada y contraportada con filtros anti-producto."""
+    num_pages = len(reader.pages)
+    sample_pages = []
+    sample_pages.extend(reader.pages[:min(3, num_pages)])
+    if num_pages > 3:
+        sample_pages.extend(reader.pages[max(3, num_pages - 2):])
+    full_text = "\n".join(p.extract_text() or "" for p in sample_pages)
+    stem_lower = path.stem.lower()
+    supp_name = None
+
+    # 1. Identificación por marca conocida HORECA
+    if "dialva" in stem_lower or "dialva" in full_text.lower():
+        supp_name = "DIALVA Hostelería S.L."
+    elif "abordo" in stem_lower or "abordo" in full_text.lower() or "servifrio" in full_text.lower():
+        supp_name = "Abordo Hostelería / Servifrío"
+    elif "ferjusanz" in stem_lower or "ferjusanz" in full_text.lower():
+        supp_name = "VERDURA FERJUSANZ C.B"
+    elif "morego" in stem_lower or "morego" in full_text.lower():
+        supp_name = "MOREGO INDUSTRIAS CÁRNICAS, S.L"
+    elif "ahumados" in stem_lower or "dominguez" in full_text.lower() or "domínguez" in full_text.lower():
+        supp_name = "Ahumados Domínguez"
+
+    # 2. Si no es marca conocida, buscar razón social con forma jurídica
+    if not supp_name:
+        comp_m = re.search(r"([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,40}(?:S\.L\.|S\.A\.|C\.B\.|S\.L\.U\.))", full_text)
+        if comp_m:
+            cand = comp_m.group(1).strip()
+            words = cand.split()
+            cleaned_words = []
+            for w in words:
+                n = len(w)
+                if n >= 4 and n % 2 == 0 and w[:n//2].lower() == w[n//2:].lower():
+                    cleaned_words.append(w[:n//2])
+                else:
+                    cleaned_words.append(w)
+            cand_clean = " ".join(cleaned_words).strip()
+            if not any(cand_clean.lower().startswith(p) for p in ["kg ", "lote ", "pack ", "caja ", "bandeja ", "pieza "]):
+                supp_name = cand_clean
+
+    # 3. Fallback a nombre de archivo limpio
+    if not supp_name:
+        clean_stem = re.sub(r"(?i)(?:catalogo|tarifa|lista|precios|noviembre|diciembre|enero|febrero|marzo|\d{4})", "", path.stem)
+        clean_stem = re.sub(r"[-_]+", " ", clean_stem).strip().title()
+        supp_name = clean_stem if len(clean_stem) >= 3 else "Proveedor HORECA"
+
+    # 4. Teléfono (fijos y móviles)
+    phone_m = re.search(r"(?:tel[ée]fonos?|whatsapp|tfno|pedidos|telf)[^\d\n]*((?:\+?34\s*)?[6789]\d[\d\s\-/y]{7,25})", full_text, re.I)
+    phone = phone_m.group(1).strip() if phone_m else None
+    if phone:
+        phone = re.sub(r"\s+", " ", phone).strip(" .,;:-")
+
+    # 5. CIF / NIF
+    cif_m = re.search(r"\b(?:CIF|NIF|N\.I\.F\.|C\.I\.F\.)?[:\s]*([A-HJ-NP-SUVW]\-?\d{7,8}[0-9A-J])\b", full_text, re.I)
+    cif = cif_m.group(1).strip() if cif_m else None
+
+    # 6. Email (real)
+    email_m = re.search(r"\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b", full_text)
+    email = None
+    if email_m:
+        cand_email = email_m.group(1).lower().strip()
+        if not any(d in cand_email for d in ["adobe.com", "google.com", "example.com", "pedidos@proveedor"]):
+            email = cand_email
+
+    return {"name": supp_name, "cif": cif, "phone": phone, "email": email}
+
+
 # ==============================================================================
 # 3. ESTRATEGIA PDF ESPACIAL (Parametrizable para catálogos publicitarios tipo revista)
 # ==============================================================================
@@ -174,25 +241,7 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
 
         # Detección de proveedor
         if self.detected_supplier is None and len(reader.pages) > 0:
-            full_text = "\n".join(page.extract_text() or "" for page in reader.pages[:3])
-            comp_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:S\.L\.|S\.A\.|C\.B\.|S\.L\.U\.))', full_text)
-            cif_m = re.search(r'\b(?:CIF|NIF)[:\s]*([A-HJ-NP-SUVW]\-?\d{7,8}[0-9A-J])\b', full_text, re.I)
-            phone_m = re.search(r'(?:tel[ée]fonos?|whatsapp|tfno|pedidos)[^\d\n]*((?:\+?34\s*)?[6789]\d[\d\s\-/y]{7,25})', full_text, re.I)
-
-            supp_name = "Proveedor HORECA"
-            if comp_m:
-                supp_name = comp_m.group(1).strip()
-            elif "abordo" in path.stem.lower():
-                supp_name = "Abordo Hostelería / Servifrío"
-            elif "dialva" in path.stem.lower():
-                supp_name = "DIALVA Hostelería S.L."
-
-            self.detected_supplier = {
-                "name": supp_name,
-                "cif": cif_m.group(1).strip() if cif_m else None,
-                "phone": phone_m.group(1).strip() if phone_m else None,
-                "email": None
-            }
+            self.detected_supplier = detect_supplier_from_pdf(reader, path)
 
         for page_idx, page in enumerate(reader.pages, start=1):
             elements = []
@@ -395,46 +444,9 @@ class TabularPdfExtractor(BaseCatalogExtractor):
         reader = PdfReader(path)
         products: List[Dict[str, Any]] = []
 
-        # Detección heurística de metadatos de proveedor en todas las páginas del PDF
-        if len(reader.pages) > 0 and self.detected_supplier is None:
-            full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-            
-            # 1. CIF / NIF
-            cif_m = re.search(r'\b(?:CIF|NIF|N\.I\.F\.|C\.I\.F\.)?[:\s]*([A-HJ-NP-SUVW]\-?\d{7,8}[0-9A-J])\b', full_text, re.IGNORECASE)
-            cif = cif_m.group(1).strip() if cif_m else None
-            
-            # 2. Teléfonos (fijo y móvil, incluyendo dobles separados por - o /)
-            phone_m = re.search(
-                r'(?:(?:tel[ée]fono|whatsapp|tlf|pedidos|contacto)[^\d\n]*)((?:\+?34\s*)?(?:[6789]\d(?:\s*\d){7})(?:\s*[-/y]\s*(?:\+?34\s*)?(?:[6789]\d(?:\s*\d){7}))?)',
-                full_text,
-                re.IGNORECASE
-            )
-            phone = phone_m.group(1).strip() if phone_m else None
-            
-            # 3. Email
-            email_m = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', full_text)
-            email = email_m.group(1).strip() if email_m else None
-            
-            # 4. Razón Social o Nombre de Empresa
-            # Buscar primero líneas formales con forma societaria (S.L., S.A., C.B., etc.)
-            supp_name = None
-            company_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:S\.L\.|S\.A\.|C\.B\.|S\.L\.U\.|S\.C\.|S\.A\.U\.))', full_text)
-            if company_m:
-                supp_name = re.sub(r'[\r\n]+', ' ', company_m.group(1)).strip()
-                supp_name = re.sub(r'\s+', ' ', supp_name).strip()
-                supp_name = re.sub(r'^[\s.,;:-]+|[\s.,;:-]+$', '', supp_name)
-            
-            if not supp_name:
-                first_text = reader.pages[0].extract_text() or ""
-                lines = [l.strip() for l in first_text.split('\n') if l.strip() and not any(k in l.lower() for k in ['pág', 'fecha', 'cif', 'tarifa', 'listado', 'nombre', 'precio', 'lote', 'kg', 'iva'])]
-                supp_name = lines[0] if lines else path.stem.replace('-', ' ').replace('_', ' ').title()
-            
-            self.detected_supplier = {
-                "name": supp_name,
-                "cif": cif,
-                "phone": phone,
-                "email": email
-            }
+        # Detección de proveedor
+        if self.detected_supplier is None and len(reader.pages) > 0:
+            self.detected_supplier = detect_supplier_from_pdf(reader, path)
 
         # Patrones de ruido a descartar en PDFs administrativos
         noise_patterns = [
@@ -537,20 +549,7 @@ class CoordinateTablePdfExtractor(BaseCatalogExtractor):
         products: List[Dict[str, Any]] = []
 
         # Extraer metadatos de proveedor
-        full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        cif_m = re.search(r'\b(?:CIF|NIF)[:\s]*([A-HJ-NP-SUVW]\-?\d{7,8}[0-9A-J])\b', full_text, re.I)
-        phone_m = re.search(r'(?:tel[ée]fonos?|whatsapp|tfno|pedidos)[^\d\n]*((?:\+?34\s*)?[6789]\d[\d\s\-/y]{7,25})', full_text, re.I)
-        comp_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:S\.L\.|S\.A\.|C\.B\.|S\.L\.U\.))', full_text)
-
-        supp_name = comp_m.group(1).strip() if comp_m else "Morego Industrias Cárnicas, S.L."
-        supp_name = re.sub(r'\s+', ' ', supp_name).strip(' .,;:-')
-
-        self.detected_supplier = {
-            "name": supp_name,
-            "cif": cif_m.group(1).strip() if cif_m else None,
-            "phone": phone_m.group(1).strip() if phone_m else None,
-            "email": None
-        }
+        self.detected_supplier = detect_supplier_from_pdf(reader, path)
 
         for page_idx, page in enumerate(reader.pages, start=1):
             elements = []
@@ -619,32 +618,8 @@ class VisualFlyerPdfExtractor(BaseCatalogExtractor):
         reader = PdfReader(path)
         products: List[Dict[str, Any]] = []
 
-        full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        
         # Detección de proveedor
-        if "ahumados" in path.stem.lower():
-            supp_name = "Ahumados Domínguez / Carnicería Selección"
-        else:
-            comp_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:DOMINGUEZ|DOMÍNGUEZ|AHUMADOS|CARNICERÍA|IBÉRICO))', full_text, re.I)
-            if comp_m:
-                words = comp_m.group(1).split()
-                cleaned_words = []
-                for w in words:
-                    n = len(w)
-                    if n >= 4 and n % 2 == 0 and w[:n//2].lower() == w[n//2:].lower():
-                        cleaned_words.append(w[:n//2])
-                    else:
-                        cleaned_words.append(w)
-                supp_name = " ".join(cleaned_words).title()
-            else:
-                supp_name = "Proveedor Campaña / HORECA"
-
-        self.detected_supplier = {
-            "name": supp_name,
-            "cif": None,
-            "phone": None,
-            "email": None
-        }
+        self.detected_supplier = detect_supplier_from_pdf(reader, path)
 
         for page_idx, page in enumerate(reader.pages, start=1):
             raw_elements = []

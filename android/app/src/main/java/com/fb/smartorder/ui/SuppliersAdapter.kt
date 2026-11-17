@@ -51,7 +51,8 @@ class SuppliersAdapter(
                 binding.tvSupplierChannelBadge.text = "WHATSAPP 📲"
             }
             binding.tvSupplierItemPhone.text = "Teléfono: ${supplier.phone ?: "No configurado"}"
-            binding.tvSupplierItemEmail.text = "Email: ${supplier.email ?: "pedidos@proveedor.com"}"
+            val emailText = if (supplier.email.isNullOrBlank()) "No disponible (Solo WhatsApp)" else supplier.email
+            binding.tvSupplierItemEmail.text = "Email: $emailText"
 
             binding.root.setOnClickListener {
                 onSupplierClick?.invoke(supplier)

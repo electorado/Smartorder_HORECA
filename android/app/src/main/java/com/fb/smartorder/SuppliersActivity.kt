@@ -34,6 +34,7 @@ class SuppliersActivity : AppCompatActivity() {
 
     private var pendingUploadSupplierId: String = ""
     private var pendingIsAnnex: Boolean = false
+    private var pendingTargetForContact: ((String?, String?) -> Unit)? = null
 
     // Selector de contactos del teléfono
     private val contactPickerLauncher = registerForActivityResult(
@@ -185,7 +186,13 @@ class SuppliersActivity : AppCompatActivity() {
                     }
                 }
 
-                showAddSupplierDialog(name, phone)
+                if (pendingTargetForContact != null) {
+                    val cb = pendingTargetForContact
+                    pendingTargetForContact = null
+                    cb?.invoke(name, phone)
+                } else {
+                    showAddSupplierDialog(name, phone)
+                }
             }
         }
     }
@@ -224,35 +231,15 @@ class SuppliersActivity : AppCompatActivity() {
                 binding.pbSuppliersLoading.visibility = View.GONE
                 result.onSuccess { resp ->
                     loadSuppliers()
-                    val title = if (resp.isNewSupplier == true) {
-                        "¡Nuevo Proveedor Añadido! 🎉"
-                    } else if (pendingIsAnnex) {
-                        "Anexo de Ofertas Cargado 📑"
-                    } else {
-                        "Tarifa Renovada (Sustituida) ✅"
-                    }
-                    val msg = StringBuilder()
-                    msg.append("• Proveedor: ${resp.supplierName ?: "Identificado"}\n")
-                    if (!resp.detectedPhone.isNullOrEmpty()) {
-                        msg.append("• Teléfono / WhatsApp: ${resp.detectedPhone}\n")
-                    }
-                    if (!resp.detectedEmail.isNullOrEmpty()) {
-                        msg.append("• Email: ${resp.detectedEmail}\n")
-                    }
-                    msg.append("• Productos vigentes: ${resp.productsLoaded}\n\n")
-                    if (resp.isNewSupplier == true) {
-                        msg.append("El proveedor se ha guardado automáticamente en el directorio y sus productos ya están disponibles en el catálogo.")
-                    } else if (pendingIsAnnex) {
-                        msg.append("Se han añadido o actualizado las ofertas de este folleto manteniendo el catálogo base.")
-                    } else {
-                        msg.append("Se han sustituido los productos anteriores para evitar pedir productos descatalogados. La tarifa vigente ya está actualizada.")
-                    }
-
-                    AlertDialog.Builder(this)
-                        .setTitle(title)
-                        .setMessage(msg.toString())
-                        .setPositiveButton("Aceptar", null)
-                        .show()
+                    showConfirmUploadedSupplierDialog(
+                        supplierId = resp.supplierId ?: "",
+                        initialName = resp.supplierName ?: "Proveedor",
+                        initialPhone = resp.detectedPhone,
+                        initialEmail = resp.detectedEmail,
+                        productsCount = resp.productsLoaded,
+                        isNew = resp.isNewSupplier == true,
+                        isAnnex = pendingIsAnnex
+                    )
                 }.onFailure { err ->
                     Toast.makeText(this, "Error procesando catálogo: ${err.message}", Toast.LENGTH_LONG).show()
                 }
@@ -260,6 +247,125 @@ class SuppliersActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "Error leyendo PDF: ${e.message}", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun showConfirmUploadedSupplierDialog(
+        supplierId: String,
+        initialName: String,
+        initialPhone: String?,
+        initialEmail: String?,
+        productsCount: Int,
+        isNew: Boolean,
+        isAnnex: Boolean
+    ) {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 10)
+        }
+
+        val tvInfo = TextView(this).apply {
+            text = if (isAnnex) {
+                "Se han procesado $productsCount productos de oferta.\nRevisa los datos del proveedor:"
+            } else {
+                "Se han cargado $productsCount productos en el catálogo.\nConfirma o ajusta los datos del proveedor:"
+            }
+            textSize = 13f
+            setPadding(0, 0, 0, 16)
+        }
+
+        val etName = EditText(this).apply {
+            hint = "Nombre Comercial *"
+            setText(initialName)
+        }
+
+        val etPhone = EditText(this).apply {
+            hint = "Teléfono / WhatsApp (+34...)"
+            inputType = android.text.InputType.TYPE_CLASS_PHONE
+            setText(initialPhone ?: "")
+        }
+
+        val etEmail = EditText(this).apply {
+            hint = "Email para pedidos (opcional)"
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setText(initialEmail ?: "")
+        }
+
+        val btnPickFromAgenda = Button(this).apply {
+            text = "📇 Buscar en Contactos del Teléfono"
+            textSize = 12f
+            setOnClickListener {
+                pendingTargetForContact = { cName, cPhone ->
+                    if (cName != null && etName.text.isNullOrBlank()) etName.setText(cName)
+                    if (cPhone != null) etPhone.setText(cPhone)
+                }
+                contactPickerLauncher.launch(null)
+            }
+        }
+
+        val tvChannelLabel = TextView(this).apply {
+            text = "Canal preferido para enviar pedidos:"
+            textSize = 13f
+            setPadding(0, 16, 0, 4)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+
+        val rgChannel = RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+        }
+        val isEmailDefault = !initialEmail.isNullOrBlank() && initialPhone.isNullOrBlank()
+        val rbWhatsapp = RadioButton(this).apply {
+            text = "WhatsApp 📲"
+            isChecked = !isEmailDefault
+        }
+        val rbEmail = RadioButton(this).apply {
+            text = "Email ✉️"
+            isChecked = isEmailDefault
+        }
+        rgChannel.addView(rbWhatsapp)
+        rgChannel.addView(rbEmail)
+
+        layout.addView(tvInfo)
+        layout.addView(etName)
+        layout.addView(etPhone)
+        layout.addView(etEmail)
+        layout.addView(btnPickFromAgenda)
+        layout.addView(tvChannelLabel)
+        layout.addView(rgChannel)
+
+        val dialogTitle = if (isNew) "¡Nuevo Proveedor Detectado! 🎉" else "Tarifa de Proveedor Actualizada ✅"
+
+        AlertDialog.Builder(this)
+            .setTitle(dialogTitle)
+            .setView(layout)
+            .setPositiveButton("Confirmar y Guardar") { _, _ ->
+                val name = etName.text.toString().trim()
+                if (name.isNotEmpty()) {
+                    val phone = etPhone.text.toString().trim().ifEmpty { null }
+                    val email = etEmail.text.toString().trim().ifEmpty { null }
+                    val channel = if (rbEmail.isChecked) "email" else "whatsapp"
+
+                    val supplier = Supplier(
+                        id = supplierId.ifEmpty { "prov_" + name.lowercase().replace(Regex("[^a-z0-9]"), "_") },
+                        name = name,
+                        phone = phone,
+                        email = email,
+                        preferredChannel = channel
+                    )
+
+                    binding.pbSuppliersLoading.visibility = View.VISIBLE
+                    viewModel.saveSupplier(supplier) { result ->
+                        binding.pbSuppliersLoading.visibility = View.GONE
+                        result.onSuccess {
+                            Toast.makeText(this, "Proveedor '$name' confirmado", Toast.LENGTH_SHORT).show()
+                            loadSuppliers()
+                        }.onFailure { err ->
+                            Toast.makeText(this, "Error actualizando proveedor: ${err.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Dejar como está", null)
+            .show()
     }
 
     private fun showAddSupplierDialog(initialName: String?, initialPhone: String?) {
