@@ -493,9 +493,36 @@ class MainActivity : AppCompatActivity() {
                 tvBadge.setTextColor(ContextCompat.getColor(this, R.color.button_retro_bg))
 
                 if (so.emailDispatched == true) {
-                    btnSend.visibility = View.GONE
                     layoutSent.visibility = View.VISIBLE
                     tvSentText.text = "✅ ENVIADO POR SERVIDOR (EMAIL)"
+                    if (!so.supplierPhone.isNullOrBlank()) {
+                        btnSend.visibility = View.VISIBLE
+                        btnSend.text = "📲 Enviar copia por WhatsApp"
+                        btnSend.setOnClickListener {
+                            promptSaveContactIfNeeded(so) {
+                                val sanitizedPhone = cleanSupplierPhone(so.supplierPhone)
+                                val waUrl = if (!sanitizedPhone.isNullOrBlank()) {
+                                    val waText = so.whatsappText ?: "Pedido F&B SmartOrder"
+                                    "https://api.whatsapp.com/send?phone=$sanitizedPhone&text=${Uri.encode(waText)}"
+                                } else {
+                                    so.whatsappUrl
+                                }
+                                if (!waUrl.isNullOrEmpty()) {
+                                    try {
+                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(waUrl)))
+                                    } catch (e: Exception) {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, so.whatsappText ?: "Pedido F&B SmartOrder")
+                                        }
+                                        startActivity(Intent.createChooser(shareIntent, "Compartir pedido con ${so.supplierName}"))
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        btnSend.visibility = View.GONE
+                    }
                 } else {
                     btnSend.text = "✉️ Enviar Email"
                     btnSend.visibility = View.VISIBLE

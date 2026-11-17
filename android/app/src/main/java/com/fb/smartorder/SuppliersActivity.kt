@@ -110,6 +110,22 @@ class SuppliersActivity : AppCompatActivity() {
             },
             onSupplierLongClick = { supplier ->
                 confirmDeleteSupplier(supplier)
+            },
+            onChannelToggle = { supplier ->
+                val current = supplier.preferredChannel?.lowercase() ?: "whatsapp"
+                val newChannel = if (current == "email") "whatsapp" else "email"
+                val updated = supplier.copy(preferredChannel = newChannel)
+                binding.pbSuppliersLoading.visibility = View.VISIBLE
+                viewModel.saveSupplier(updated) { result ->
+                    binding.pbSuppliersLoading.visibility = View.GONE
+                    result.onSuccess {
+                        val badge = if (newChannel == "whatsapp") "WhatsApp 📲" else "Email ✉️"
+                        Toast.makeText(this, "${supplier.name} cambiado a $badge", Toast.LENGTH_SHORT).show()
+                        loadSuppliers()
+                    }.onFailure { err ->
+                        Toast.makeText(this, "Error: ${err.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         )
         binding.rvSuppliers.layoutManager = LinearLayoutManager(this)
@@ -314,15 +330,16 @@ class SuppliersActivity : AppCompatActivity() {
         }
         val isEmailDefault = !initialEmail.isNullOrBlank() && initialPhone.isNullOrBlank()
         val rbWhatsapp = RadioButton(this).apply {
+            id = View.generateViewId()
             text = "WhatsApp 📲"
-            isChecked = !isEmailDefault
         }
         val rbEmail = RadioButton(this).apply {
+            id = View.generateViewId()
             text = "Email ✉️"
-            isChecked = isEmailDefault
         }
         rgChannel.addView(rbWhatsapp)
         rgChannel.addView(rbEmail)
+        rgChannel.check(if (isEmailDefault) rbEmail.id else rbWhatsapp.id)
 
         layout.addView(tvInfo)
         layout.addView(etName)
@@ -342,7 +359,7 @@ class SuppliersActivity : AppCompatActivity() {
                 if (name.isNotEmpty()) {
                     val phone = etPhone.text.toString().trim().ifEmpty { null }
                     val email = etEmail.text.toString().trim().ifEmpty { null }
-                    val channel = if (rbEmail.isChecked) "email" else "whatsapp"
+                    val channel = if (rgChannel.checkedRadioButtonId == rbEmail.id) "email" else "whatsapp"
 
                     val supplier = Supplier(
                         id = supplierId.ifEmpty { "prov_" + name.lowercase().replace(Regex("[^a-z0-9]"), "_") },
@@ -401,14 +418,16 @@ class SuppliersActivity : AppCompatActivity() {
             orientation = RadioGroup.HORIZONTAL
         }
         val rbWhatsapp = RadioButton(this).apply {
+            id = View.generateViewId()
             text = "WhatsApp 📲"
-            isChecked = true
         }
         val rbEmail = RadioButton(this).apply {
+            id = View.generateViewId()
             text = "Email ✉️"
         }
         rgChannel.addView(rbWhatsapp)
         rgChannel.addView(rbEmail)
+        rgChannel.check(rbWhatsapp.id)
 
         layout.addView(TextView(this).apply { text = "Datos del Proveedor:"; setTypeface(typeface, android.graphics.Typeface.BOLD) })
         layout.addView(etName)
@@ -426,7 +445,7 @@ class SuppliersActivity : AppCompatActivity() {
                     val phone = etPhone.text.toString().trim().ifEmpty { null }
                     val email = etEmail.text.toString().trim().ifEmpty { null }
                     val cleanId = "prov_" + name.lowercase().replace(Regex("[^a-z0-9]"), "_")
-                    val channel = if (rbEmail.isChecked) "email" else "whatsapp"
+                    val channel = if (rgChannel.checkedRadioButtonId == rbEmail.id) "email" else "whatsapp"
 
                     val supplier = Supplier(
                         id = cleanId,
@@ -489,15 +508,16 @@ class SuppliersActivity : AppCompatActivity() {
         }
         val isEmail = supplier.preferredChannel?.lowercase() == "email"
         val rbWhatsapp = RadioButton(this).apply {
+            id = View.generateViewId()
             text = "WhatsApp 📲"
-            isChecked = !isEmail
         }
         val rbEmail = RadioButton(this).apply {
+            id = View.generateViewId()
             text = "Email ✉️"
-            isChecked = isEmail
         }
         rgChannel.addView(rbWhatsapp)
         rgChannel.addView(rbEmail)
+        rgChannel.check(if (isEmail) rbEmail.id else rbWhatsapp.id)
 
         val btnUploadPdf = Button(this).apply {
             text = "📄 Subir Catálogo / Tarifa (PDF)"
@@ -544,7 +564,7 @@ class SuppliersActivity : AppCompatActivity() {
                 if (name.isNotEmpty()) {
                     val phone = etPhone.text.toString().trim().ifEmpty { null }
                     val email = etEmail.text.toString().trim().ifEmpty { null }
-                    val channel = if (rbEmail.isChecked) "email" else "whatsapp"
+                    val channel = if (rgChannel.checkedRadioButtonId == rbEmail.id) "email" else "whatsapp"
 
                     val updatedSupplier = Supplier(
                         id = supplier.id,

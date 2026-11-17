@@ -8,7 +8,8 @@ import com.fb.smartorder.model.Supplier
 
 class SuppliersAdapter(
     private val onSupplierClick: ((Supplier) -> Unit)? = null,
-    private val onSupplierLongClick: ((Supplier) -> Unit)? = null
+    private val onSupplierLongClick: ((Supplier) -> Unit)? = null,
+    private val onChannelToggle: ((Supplier) -> Unit)? = null
 ) : RecyclerView.Adapter<SuppliersAdapter.SupplierViewHolder>() {
 
     private val suppliersList = mutableListOf<Supplier>()
@@ -49,6 +50,9 @@ class SuppliersAdapter(
                 binding.tvSupplierChannelBadge.setBackgroundResource(com.fb.smartorder.R.drawable.bg_badge_whatsapp)
                 binding.tvSupplierChannelBadge.setTextColor(android.graphics.Color.parseColor("#2E7D32"))
                 binding.tvSupplierChannelBadge.text = "WHATSAPP 📲"
+            }
+            binding.tvSupplierChannelBadge.setOnClickListener {
+                onChannelToggle?.invoke(supplier)
             }
             binding.tvSupplierItemPhone.text = "Teléfono: ${supplier.phone ?: "No configurado"}"
             val emailText = if (supplier.email.isNullOrBlank()) "No disponible (Solo WhatsApp)" else supplier.email
