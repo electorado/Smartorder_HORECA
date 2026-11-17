@@ -22,6 +22,10 @@ object SessionManager {
     @Volatile
     var activeEmail: String = ""
 
+    fun init(context: Context) {
+        getUserEmail(context)
+    }
+
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }

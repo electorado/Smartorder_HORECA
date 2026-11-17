@@ -3,7 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 class Supplier(BaseModel):
-    id: str = Field(..., description="ID único del proveedor (ej. prov_paco_01)")
+    id: Optional[str] = Field(None, description="ID único del proveedor (ej. prov_paco_01)")
     name: str = Field(..., description="Nombre comercial del proveedor")
     email: Optional[str] = Field(None, description="Email para recepción de pedidos")
     phone: Optional[str] = Field(None, description="Teléfono de contacto / WhatsApp")

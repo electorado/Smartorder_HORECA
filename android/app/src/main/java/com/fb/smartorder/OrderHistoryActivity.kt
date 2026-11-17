@@ -13,7 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.fb.smartorder.databinding.ActivityOrderHistoryBinding
 import com.fb.smartorder.util.SessionManager
-import com.fb.smartorder.model.OrderDetailResponse
+import com.fb.smartorder.model.*
 import com.fb.smartorder.ui.OrderHistoryAdapter
 import com.fb.smartorder.ui.ProductViewModel
 
@@ -135,9 +135,36 @@ class OrderHistoryActivity : AppCompatActivity() {
             return
         }
 
+        fun buildSafeWaUrl(so: SupplierSubOrderResponse): String? {
+            val phone = so.supplierPhone
+            if (!phone.isNullOrBlank()) {
+                val parts = phone.split(Regex("[/,;\\n|y\\-]"))
+                val cands = mutableListOf<String>()
+                for (p in parts) {
+                    var digits = p.filter { it.isDigit() }
+                    if (digits.startsWith("0034")) digits = digits.substring(4)
+                    else if (digits.startsWith("34") && digits.length == 11) digits = digits.substring(2)
+                    if (digits.length == 9 || (digits.length in 10..15)) {
+                        cands.add(digits)
+                    }
+                }
+                if (cands.isEmpty()) {
+                    val allDigits = phone.filter { it.isDigit() }
+                    if (allDigits.length in 9..15) cands.add(allDigits)
+                }
+                val mobile = cands.firstOrNull { it.startsWith("6") || it.startsWith("7") } ?: cands.firstOrNull()
+                val cleanPhone = if (mobile != null && mobile.length == 9) "34$mobile" else mobile
+                if (!cleanPhone.isNullOrBlank()) {
+                    val waText = so.whatsappText ?: "Pedido F&B SmartOrder"
+                    return "https://api.whatsapp.com/send?phone=$cleanPhone&text=${Uri.encode(waText)}"
+                }
+            }
+            return so.whatsappUrl
+        }
+
         if (suborders.size == 1) {
             val single = suborders[0]
-            val waUrl = single.whatsappUrl
+            val waUrl = buildSafeWaUrl(single)
             if (!waUrl.isNullOrEmpty()) {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(waUrl))
                 startActivity(intent)
@@ -150,8 +177,9 @@ class OrderHistoryActivity : AppCompatActivity() {
                 .setTitle("Seleccionar proveedor para WhatsApp")
                 .setItems(names) { _, which ->
                     val selectedSub = suborders[which]
-                    selectedSub.whatsappUrl?.let { url ->
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    val waUrl = buildSafeWaUrl(selectedSub)
+                    if (!waUrl.isNullOrEmpty()) {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(waUrl))
                         startActivity(intent)
                     }
                 }

@@ -200,6 +200,47 @@ def get_suppliers(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def resolve_user_email(*candidates, fallback: str = "pablo@horeca.com") -> str:
+    """Extrae el email de usuario válido ignorando instancias de Query o Header de FastAPI."""
+    for c in candidates:
+        if isinstance(c, str) and c.strip():
+            return c.strip().lower()
+    return fallback.strip().lower()
+
+
+def sanitize_whatsapp_phone(raw_phone: Optional[str]) -> str:
+    """Extrae un único número de teléfono limpio apto para la URL de WhatsApp (preferente móvil español 6xx/7xx o formato internacional)."""
+    if not raw_phone:
+        return ""
+    parts = re.split(r'[/,;\n|y\-]', str(raw_phone))
+    cands = []
+    for p in parts:
+        digits = re.sub(r'[^\d]', '', p)
+        if digits.startswith("0034"):
+            digits = digits[4:]
+        elif digits.startswith("34") and len(digits) == 11:
+            digits = digits[2:]
+        if len(digits) == 9:
+            cands.append(digits)
+        elif 9 < len(digits) <= 15:
+            cands.append(digits)
+    if not cands:
+        m = re.findall(r'[6789]\d{8}', str(raw_phone))
+        if m:
+            cands = m
+    if not cands:
+        clean_all = re.sub(r'[^\d]', '', str(raw_phone))
+        if len(clean_all) == 9:
+            return f"34{clean_all}"
+        return clean_all
+
+    mobile = next((c for c in cands if c.startswith(('6', '7'))), None)
+    selected = mobile if mobile else cands[0]
+    if len(selected) == 9:
+        return f"34{selected}"
+    return selected
+
+
 @app.post("/api/v1/suppliers")
 def create_or_update_supplier(
     supplier: Supplier,
@@ -209,7 +250,7 @@ def create_or_update_supplier(
     """Crea o actualiza un proveedor asociado al cocinero."""
     try:
         db = get_database()
-        u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
+        u_email = resolve_user_email(x_user_email, user_email)
         supp_dict = supplier.model_dump()
         supp_dict["user_email"] = u_email
         
@@ -223,6 +264,14 @@ def create_or_update_supplier(
             {"$set": supp_dict},
             upsert=True
         )
+
+        # Sincronizar el nombre en productos del catálogo
+        if supp_dict.get("name"):
+            db["productos_brutos"].update_many(
+                {"supplier_id": supp_dict["id"], "user_email": u_email},
+                {"$set": {"supplier_name": supp_dict["name"]}}
+            )
+
         return {
             "message": f"Proveedor '{supp_dict['name']}' guardado correctamente.",
             "supplier": supp_dict
@@ -526,13 +575,19 @@ def create_order(
     """Crea y consolida un nuevo pedido en el sistema, dividiéndolo automáticamente por proveedores y generando mensajes WhatsApp."""
     try:
         db = get_database()
+        u_email = resolve_user_email(x_user_email, user_email, getattr(order_data, "user_email", None))
 
         # Agrupar ítems por proveedor
         grouped = {}
         for item in order_data.items:
             s_id = item.supplier_id
             if s_id not in grouped:
-                supp = db["proveedores"].find_one({"id": s_id})
+                # Priorizar proveedor perteneciente a este cocinero
+                supp = db["proveedores"].find_one({"id": s_id, "user_email": u_email})
+                if not supp and item.supplier_name:
+                    supp = db["proveedores"].find_one({"name": item.supplier_name, "user_email": u_email})
+                if not supp:
+                    supp = db["proveedores"].find_one({"id": s_id})
                 s_name = item.supplier_name or (supp.get("name") if supp else s_id)
                 s_email = supp.get("email") if supp else None
                 s_phone = supp.get("phone") if supp else None
@@ -581,7 +636,7 @@ def create_order(
 
             v["whatsapp_text"] = wa_text
             phone_raw = v.get("supplier_phone") or ""
-            phone_clean = re.sub(r"[^\d+]", "", phone_raw).replace("+", "")
+            phone_clean = sanitize_whatsapp_phone(phone_raw)
             if phone_clean:
                 v["whatsapp_url"] = f"https://api.whatsapp.com/send?phone={phone_clean}&text={urllib.parse.quote(wa_text)}"
             else:
@@ -630,7 +685,6 @@ def create_order(
         order_data.status = "pending"
 
         order_dict = order_data.model_dump() if hasattr(order_data, "model_dump") else order_data.dict()
-        u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
         order_dict["user_email"] = u_email
         res = db["pedidos"].insert_one(order_dict)
         order_id = str(res.inserted_id)

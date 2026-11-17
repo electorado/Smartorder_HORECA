@@ -166,10 +166,23 @@ def detect_supplier_from_pdf(reader: PdfReader, path: Path) -> Dict[str, Any]:
         supp_name = clean_stem if len(clean_stem) >= 3 else "Proveedor HORECA"
 
     # 4. Teléfono (fijos y móviles)
-    phone_m = re.search(r"(?:tel[ée]fonos?|whatsapp|tfno|pedidos|telf)[^\d\n]*((?:\+?34\s*)?[6789]\d[\d\s\-/y]{7,25})", full_text, re.I)
-    phone = phone_m.group(1).strip() if phone_m else None
-    if phone:
-        phone = re.sub(r"\s+", " ", phone).strip(" .,;:-")
+    phone_m = re.search(r"(?:tel[ée]fonos?|whatsapp|tfno|pedidos|telf)[^\d\n]*((?:\+?34\s*)?[6789]\d[\d\s\-/y]{7,35})", full_text, re.I)
+    phone_raw = phone_m.group(1).strip() if phone_m else None
+    phone = None
+    if phone_raw:
+        parts = re.split(r'[/,;\n|y\-]', phone_raw)
+        cands = []
+        for p in parts:
+            d = re.sub(r'[^\d]', '', p)
+            if d.startswith("34") and len(d) == 11:
+                d = d[2:]
+            if len(d) == 9:
+                cands.append(d)
+        if cands:
+            mobile = next((c for c in cands if c.startswith(('6', '7'))), None)
+            phone = mobile if mobile else cands[0]
+        else:
+            phone = re.sub(r"\s+", " ", phone_raw).strip(" .,;:-")
 
     # 5. CIF / NIF
     cif_m = re.search(r"\b(?:CIF|NIF|N\.I\.F\.|C\.I\.F\.)?[:\s]*([A-HJ-NP-SUVW]\-?\d{7,8}[0-9A-J])\b", full_text, re.I)

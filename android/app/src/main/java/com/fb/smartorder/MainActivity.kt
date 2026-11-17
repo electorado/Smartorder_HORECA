@@ -535,7 +535,14 @@ class MainActivity : AppCompatActivity() {
 
                     btnSend.setOnClickListener {
                         promptSaveContactIfNeeded(so) {
-                            val waUrl = so.whatsappUrl
+                            val sanitizedPhone = cleanSupplierPhone(so.supplierPhone)
+                            val waUrl = if (!sanitizedPhone.isNullOrBlank()) {
+                                val waText = so.whatsappText ?: "Pedido F&B SmartOrder"
+                                "https://api.whatsapp.com/send?phone=$sanitizedPhone&text=${Uri.encode(waText)}"
+                            } else {
+                                so.whatsappUrl
+                            }
+
                             if (!waUrl.isNullOrEmpty()) {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(waUrl))
                                 try {
@@ -629,6 +636,27 @@ class MainActivity : AppCompatActivity() {
         val sp = getSharedPreferences("phone_contacts_cache", MODE_PRIVATE)
         val cacheKey = "contact_" + (phone ?: email ?: "")
         return sp.getBoolean(cacheKey, false)
+    }
+
+    private fun cleanSupplierPhone(phone: String?): String? {
+        if (phone.isNullOrBlank()) return null
+        val parts = phone.split(Regex("[/,;\\n|y\\-]"))
+        val cands = mutableListOf<String>()
+        for (p in parts) {
+            var digits = p.filter { it.isDigit() }
+            if (digits.startsWith("0034")) digits = digits.substring(4)
+            else if (digits.startsWith("34") && digits.length == 11) digits = digits.substring(2)
+            if (digits.length == 9 || (digits.length in 10..15)) {
+                cands.add(digits)
+            }
+        }
+        if (cands.isEmpty()) {
+            val allDigits = phone.filter { it.isDigit() }
+            if (allDigits.length in 9..15) cands.add(allDigits)
+        }
+        if (cands.isEmpty()) return null
+        val mobile = cands.firstOrNull { it.startsWith("6") || it.startsWith("7") } ?: cands.first()
+        return if (mobile.length == 9) "34$mobile" else mobile
     }
 
     private fun markSupplierContactHandled(phone: String?, email: String?) {
