@@ -493,7 +493,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (so.emailDispatched == true) {
                     layoutSent.visibility = View.VISIBLE
-                    tvSentText.text = "✅ ENVIADO POR SERVIDOR (EMAIL)"
+                    tvSentText.text = "✅ ENVIADO AUTOMÁTICAMENTE (EMAIL)"
                     if (!so.supplierPhone.isNullOrBlank()) {
                         btnSend.visibility = View.VISIBLE
                         btnSend.text = "📲 Enviar copia por WhatsApp"

@@ -642,36 +642,38 @@ def create_order(
             else:
                 v["whatsapp_url"] = f"https://api.whatsapp.com/send?text={urllib.parse.quote(wa_text)}"
 
-            # Envío automático por Email desde servidor si el canal preferido es email (Opción C)
+            # Envío automático por Email desde servidor si el canal preferido es email (Opción C con Brevo SMTP)
             if v.get("preferred_channel", "").lower() == "email":
                 try:
-                    smtp_host = os.getenv("SMTP_HOST")
-                    if smtp_host:
-                        import smtplib
-                        from email.message import EmailMessage
-                        msg = EmailMessage()
-                        msg["Subject"] = f"Pedido F&B SmartOrder - {s_name}"
-                        msg["From"] = os.getenv("SMTP_FROM", u_email)
-                        msg["Reply-To"] = u_email
-                        msg["To"] = v.get("supplier_email") or "pedidos@proveedor.com"
-                        msg.set_content(wa_text)
-                        smtp_port = int(os.getenv("SMTP_PORT", 587))
-                        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-                            if os.getenv("SMTP_USE_TLS", "true").lower() == "true":
-                                server.starttls()
-                            user = os.getenv("SMTP_USER")
-                            pwd = os.getenv("SMTP_PASSWORD")
-                            if user and pwd:
-                                server.login(user, pwd)
-                            server.send_message(msg)
-                        v["email_dispatched"] = True
-                        v["email_status"] = "enviado_smtp"
-                    else:
-                        print(f"ℹ️ [EMAIL BACKEND] No hay SMTP_HOST configurado. Se delega el envío por Email al cliente para {v.get('supplier_email')}")
-                        v["email_dispatched"] = False
-                        v["email_status"] = "pendiente_cliente"
+                    smtp_host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
+                    smtp_port = int(os.getenv("SMTP_PORT", 587))
+                    smtp_user = os.getenv("SMTP_USER", "c3e19e001@smtp-brevo.com")
+                    smtp_pwd = os.getenv("SMTP_PASSWORD", "xsmtpsib-6965a5e17ef4c854c9e1e2b137c506ffffaf43bf1870e770d7a9debcd55e2bcf-1dCRyMTa28bNE0d5")
+                    smtp_from = os.getenv("SMTP_FROM", "pamoncayo@gmail.com")
+
+                    user_doc = db["usuarios"].find_one({"email": u_email})
+                    chef_name = (user_doc.get("name") if user_doc else None) or "Cocinero"
+                    restaurant_name = (user_doc.get("restaurant_name") if user_doc else None) or "Hostelería"
+
+                    import smtplib
+                    from email.message import EmailMessage
+                    msg = EmailMessage()
+                    msg["Subject"] = f"📦 Pedido Hostelería: {restaurant_name} ({chef_name}) - {s_name} - {datetime.now().strftime('%d/%m/%Y')}"
+                    msg["From"] = f"{restaurant_name} ({chef_name}) <{smtp_from}>"
+                    msg["Reply-To"] = u_email
+                    msg["To"] = v.get("supplier_email") or "pedidos@proveedor.com"
+                    msg.set_content(wa_text)
+
+                    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
+                        if os.getenv("SMTP_USE_TLS", "true").lower() == "true":
+                            server.starttls()
+                        server.login(smtp_user, smtp_pwd)
+                        server.send_message(msg)
+                    v["email_dispatched"] = True
+                    v["email_status"] = "enviado_smtp"
+                    print(f"✅ [EMAIL BREVO] Pedido para {s_name} enviado con éxito a {v.get('supplier_email')}")
                 except Exception as mail_err:
-                    print(f"⚠️ Error enviando email: {mail_err}")
+                    print(f"⚠️ Error enviando email con Brevo: {mail_err}")
                     v["email_dispatched"] = False
                     v["email_status"] = f"error: {str(mail_err)}"
             else:
