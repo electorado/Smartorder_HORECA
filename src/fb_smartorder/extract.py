@@ -133,15 +133,16 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
 
     def __init__(
         self,
-        anchor_regex: str = r'[C|c][:.]?\s*(\d{3,5})',
+        anchor_regex: str = r'\b[C|c][:.-]?\s*(\d{3,5})\b',
         ignored_section_headers: Optional[Set[str]] = None,
         noise_phrases: Optional[List[str]] = None,
-        x_tolerance: float = 190.0,
+        x_tolerance: float = 240.0,
         y_above: float = 75.0,
-        y_below: float = 65.0,
-        header_y_limit: float = 780.0,
+        y_below: float = 100.0,
+        header_y_limit: float = 950.0,
         save_output: bool = False
     ):
+        super().__init__()
         self.anchor_regex = anchor_regex
         self.ignored_section_headers = ignored_section_headers or set()
         self.noise_phrases = noise_phrases or []
@@ -170,6 +171,28 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
         print(f"📑 [SpatialCardPdfExtractor] Analizando maquetación por tarjetas: {file_path}")
         reader = PdfReader(path)
         products: List[Dict[str, Any]] = []
+
+        # Detección de proveedor
+        if self.detected_supplier is None and len(reader.pages) > 0:
+            full_text = "\n".join(page.extract_text() or "" for page in reader.pages[:3])
+            comp_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:S\.L\.|S\.A\.|C\.B\.|S\.L\.U\.))', full_text)
+            cif_m = re.search(r'\b(?:CIF|NIF)[:\s]*([A-HJ-NP-SUVW]\-?\d{7,8}[0-9A-J])\b', full_text, re.I)
+            phone_m = re.search(r'(?:tel[ée]fonos?|whatsapp|tfno|pedidos)[^\d\n]*((?:\+?34\s*)?[6789]\d[\d\s\-/y]{7,25})', full_text, re.I)
+
+            supp_name = "Proveedor HORECA"
+            if comp_m:
+                supp_name = comp_m.group(1).strip()
+            elif "abordo" in path.stem.lower():
+                supp_name = "Abordo Hostelería / Servifrío"
+            elif "dialva" in path.stem.lower():
+                supp_name = "DIALVA Hostelería S.L."
+
+            self.detected_supplier = {
+                "name": supp_name,
+                "cif": cif_m.group(1).strip() if cif_m else None,
+                "phone": phone_m.group(1).strip() if phone_m else None,
+                "email": None
+            }
 
         for page_idx, page in enumerate(reader.pages, start=1):
             elements = []
@@ -223,13 +246,17 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
                 ]
 
                 # Nombre del producto y variedad: elementos situados por encima o alineados con el código
-                name_candidates = [e for e in card_elems if cy - 4.0 <= e['y'] <= cy + self.y_above]
+                name_candidates = [
+                    e for e in card_elems
+                    if cy - 6.0 <= e['y'] <= cy + self.y_above
+                    and not any(k in e['text'].lower() for k in ['caja:', 'antes:', 'ración', 'le sale'])
+                ]
                 name_candidates = sorted(name_candidates, key=lambda x: -x['y'])
 
                 name_tokens = []
                 for nc in name_candidates:
                     clean_t = self._clean_product_name(nc['text'])
-                    clean_t = re.sub(r'C[:.]?\s*\d+', '', clean_t, flags=re.IGNORECASE).strip(' ·-(),')
+                    clean_t = re.sub(r'\b[C|c][:.-]?\s*\d+\b', '', clean_t, flags=re.IGNORECASE).strip(' ·-(),')
                     if clean_t and not clean_t.isdigit() and '€' not in clean_t and len(clean_t) > 1:
                         name_tokens.append(clean_t)
 
@@ -246,28 +273,54 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
                     if fm2:
                         format_str = fm2.group(1)
                         break
+                    fm3 = re.search(r'(caja:?\s*[\d.,]+\s*k?g|[\d.,]+\s*pzas?\.?/kg)', e['text'], re.I)
+                    if fm3:
+                        format_str = fm3.group(1)
+                        break
 
-                # Precio y unidad de medida (y < cy)
-                price_elems = [e for e in card_elems if e['y'] < cy]
-                price_elems = sorted(price_elems, key=lambda x: -x['y'])
-
+                # Precio y unidad de medida (y <= cy)
+                price_elems = [e for e in card_elems if e['y'] <= cy]
                 price_val = 0.0
                 unit_val = 'kg'
 
+                # Prioridad 1: Precio explícito con unidad (€/kg, €/ud, €/caja) sin texto publicitario
                 for pe in price_elems:
-                    pm = re.search(r'([\d]+[.,\'’]\d{1,2})\s*€(?:\s*/\s*([a-záéíóú]+))?', pe['text'], re.IGNORECASE)
+                    tu = pe['text'].lower()
+                    if any(np in tu for np in ['antes', 'le sale', 'ración']):
+                        continue
+                    pm = re.search(r'([\d]+[.,\'’]\d{1,2})\s*€\s*/\s*([a-záéíóú]+)', pe['text'], re.IGNORECASE)
                     if pm:
-                        price_val = float(pm.group(1).replace(',', '.').replace('\'', '.').replace('’', '.'))
-                        if pm.group(2):
+                        val = float(pm.group(1).replace(',', '.').replace('\'', '.').replace('’', '.'))
+                        if 0.5 <= val <= 500.0:
+                            price_val = val
                             unit_val = pm.group(2).lower()
-                        break
-                    else:
-                        num_m = re.search(r'^([\d]+[.,\'’]\d{1,2})$', pe['text'])
-                        if num_m and price_val == 0.0:
-                            price_val = float(num_m.group(1).replace(',', '.').replace('\'', '.').replace('’', '.'))
-                        um = re.search(r'€\s*/\s*([a-záéíóú]+)', pe['text'], re.IGNORECASE)
-                        if um:
-                            unit_val = um.group(1).lower()
+                            break
+
+                # Prioridad 2: Número con símbolo € directo
+                if price_val == 0.0:
+                    for pe in price_elems:
+                        tu = pe['text'].lower()
+                        if any(np in tu for np in ['antes', 'le sale', 'ración']):
+                            continue
+                        pm = re.search(r'([\d]+[.,\'’]\d{1,2})\s*€', pe['text'], re.IGNORECASE)
+                        if pm:
+                            val = float(pm.group(1).replace(',', '.').replace('\'', '.').replace('’', '.'))
+                            if 0.5 <= val <= 500.0:
+                                price_val = val
+                                break
+
+                # Prioridad 3: Número suelto en la tarjeta si tiene € cercano
+                if price_val == 0.0:
+                    for pe in price_elems:
+                        tu = pe['text'].lower()
+                        if any(np in tu for np in ['antes', 'le sale', 'ración']):
+                            continue
+                        num_m = re.match(r'^([\d]+[.,\'’]\d{1,2})$', pe['text'])
+                        if num_m:
+                            val = float(num_m.group(1).replace(',', '.').replace('\'', '.').replace('’', '.'))
+                            if 0.5 <= val <= 500.0:
+                                price_val = val
+                                break
 
                 if raw_name and ca['code'] and price_val > 0:
                     products.append({
@@ -468,6 +521,286 @@ class TabularPdfExtractor(BaseCatalogExtractor):
 
 
 # ==============================================================================
+# 5.1. ESTRATEGIA TABULAR POR COORDENADAS (Tablas con precios en columna separada)
+# ==============================================================================
+
+class CoordinateTablePdfExtractor(BaseCatalogExtractor):
+    """Extractor para PDFs tabulares estructurados con columnas separadas geométricamente (ej. Morego).
+    
+    Asocia el código y nombre del producto o lote en el lado izquierdo con su precio
+    ubicado exactamente a la misma altura vertical (Y) en la columna de importes.
+    Agrupa los cortes o sub-ítems pertenecientes a cada lote.
+    """
+    def extract(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+        path = Path(file_path)
+        reader = PdfReader(path)
+        products: List[Dict[str, Any]] = []
+
+        # Extraer metadatos de proveedor
+        full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        cif_m = re.search(r'\b(?:CIF|NIF)[:\s]*([A-HJ-NP-SUVW]\-?\d{7,8}[0-9A-J])\b', full_text, re.I)
+        phone_m = re.search(r'(?:tel[ée]fonos?|whatsapp|tfno|pedidos)[^\d\n]*((?:\+?34\s*)?[6789]\d[\d\s\-/y]{7,25})', full_text, re.I)
+        comp_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:S\.L\.|S\.A\.|C\.B\.|S\.L\.U\.))', full_text)
+
+        supp_name = comp_m.group(1).strip() if comp_m else "Morego Industrias Cárnicas, S.L."
+        supp_name = re.sub(r'\s+', ' ', supp_name).strip(' .,;:-')
+
+        self.detected_supplier = {
+            "name": supp_name,
+            "cif": cif_m.group(1).strip() if cif_m else None,
+            "phone": phone_m.group(1).strip() if phone_m else None,
+            "email": None
+        }
+
+        for page_idx, page in enumerate(reader.pages, start=1):
+            elements = []
+            def visitor(text, cm, tm, font_dict, font_size):
+                t = text.strip()
+                if t: elements.append({'x': round(tm[4], 1), 'y': round(tm[5], 1), 'text': t})
+            page.extract_text(visitor_text=visitor)
+
+            # Buscar anclajes de Lotes o productos principales
+            anchors = [e for e in elements if 'LOTE' in e['text'].upper() or re.match(r'^\d{4}\s+[A-Z]', e['text'])]
+            anchors = sorted(anchors, key=lambda a: -a['y'])
+
+            for i, a in enumerate(anchors):
+                ay = a['y']
+                next_y = anchors[i+1]['y'] if i + 1 < len(anchors) else 50.0
+
+                # Buscar precio a la misma altura Y (+/- 4 pt) en la columna derecha (X > 280)
+                price = None
+                for pe in elements:
+                    if abs(pe['y'] - ay) <= 4.0 and pe['x'] > 280.0:
+                        m = re.search(r'(\d+[.,]\d{2})', pe['text'])
+                        if m:
+                            price = float(m.group(1).replace(',', '.'))
+                            break
+
+                # Sub-cortes incluidos en el lote
+                subitems = []
+                for se in elements:
+                    if next_y < se['y'] < (ay - 4.0) and se['x'] < 300.0:
+                        clean_s = re.sub(r'\s+\d+\s*kg$', '', se['text'], flags=re.I).strip()
+                        if clean_s and len(clean_s) > 2 and 'pedido' not in clean_s.lower() and 'domicilio' not in clean_s.lower():
+                            subitems.append(clean_s)
+
+                if price and price > 0:
+                    clean_name = a['text'].strip()
+                    code_m = re.match(r'^(\d{3,5})\s+(.*)$', clean_name)
+                    code = code_m.group(1) if code_m else None
+                    name = code_m.group(2) if code_m else clean_name
+
+                    sub_desc = f" ({', '.join(s.title() for s in subitems[:8])})" if subitems else ""
+                    products.append({
+                        'supplier_product_code': code,
+                        'raw_name': f"{name.title()}{sub_desc}",
+                        'price': price,
+                        'unit': 'ud',
+                        'format': f"Lote surtido ({len(subitems)} cortes)" if subitems else "Pack cárnico",
+                        '_subitems': subitems
+                    })
+
+        print(f"✅ [CoordinateTablePdfExtractor] Se extrajeron {len(products)} lotes estructurados.")
+        return products
+
+
+# ==============================================================================
+# 5.2. ESTRATEGIA FLYER PUBLICITARIO 2D (Ofertas gráficas y multicolumna)
+# ==============================================================================
+
+class VisualFlyerPdfExtractor(BaseCatalogExtractor):
+    """Extractor para folletos publicitarios multicolumna y de ofertas especiales (ej. Ahumados Domínguez / Campañas).
+    
+    Gestiona textos con doble impresión de sombreado y asocia los nombres de productos
+    con sus precios situados inmediatamente debajo usando proximidad geométrica 2D.
+    """
+    def extract(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+        path = Path(file_path)
+        reader = PdfReader(path)
+        products: List[Dict[str, Any]] = []
+
+        full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        
+        # Detección de proveedor
+        if "ahumados" in path.stem.lower():
+            supp_name = "Ahumados Domínguez / Carnicería Selección"
+        else:
+            comp_m = re.search(r'([A-Za-zÁÉÍÓÚÑáéíóúñ\s,.-]{4,}(?:DOMINGUEZ|DOMÍNGUEZ|AHUMADOS|CARNICERÍA|IBÉRICO))', full_text, re.I)
+            if comp_m:
+                words = comp_m.group(1).split()
+                cleaned_words = []
+                for w in words:
+                    n = len(w)
+                    if n >= 4 and n % 2 == 0 and w[:n//2].lower() == w[n//2:].lower():
+                        cleaned_words.append(w[:n//2])
+                    else:
+                        cleaned_words.append(w)
+                supp_name = " ".join(cleaned_words).title()
+            else:
+                supp_name = "Proveedor Campaña / HORECA"
+
+        self.detected_supplier = {
+            "name": supp_name,
+            "cif": None,
+            "phone": None,
+            "email": None
+        }
+
+        for page_idx, page in enumerate(reader.pages, start=1):
+            raw_elements = []
+            def visitor(text, cm, tm, font_dict, font_size):
+                t = text.strip()
+                if t:
+                    # Limpiar duplicaciones de sombreado
+                    n = len(t)
+                    if n >= 4 and n % 2 == 0 and t[:n//2] == t[n//2:]:
+                        t = t[:n//2]
+                    raw_elements.append({
+                        'x': round(tm[4], 1),
+                        'y': round(tm[5], 1),
+                        'text': t,
+                        'size': font_size
+                    })
+            page.extract_text(visitor_text=visitor)
+
+            # Descartar elementos idénticos en la misma coordenada
+            seen = set()
+            elements = []
+            for e in raw_elements:
+                key = (e['x'], e['y'], e['text'])
+                if key not in seen:
+                    seen.add(key)
+                    elements.append(e)
+
+            # 1. Encontrar números de precio
+            price_anchors = []
+            for e in elements:
+                m = re.match(r'^(\d+(?:[.,]\d{1,2})?)$', e['text'])
+                if m:
+                    val = float(m.group(1).replace(',', '.'))
+                    if 0.5 <= val <= 500.0:
+                        unit = 'kg'
+                        has_currency = False
+                        for u in elements:
+                            if abs(u['y'] - e['y']) <= 5.0 and 0 < (u['x'] - e['x']) < 120.0:
+                                if '€' in u['text'] or any(k in u['text'].lower() for k in ['kg', 'ud', 'lote', 'caja', 'pieza']):
+                                    has_currency = True
+                                    um = re.search(r'(?:€\s*/?\s*)?([a-zA-Z]+)', u['text'])
+                                    if um and um.group(1).lower() in ['kg', 'ud', 'lote', 'caja', 'pieza']:
+                                        unit = um.group(1).lower()
+                                    break
+                        if has_currency:
+                            price_anchors.append({'price': val, 'unit': unit, 'x': e['x'], 'y': e['y']})
+
+            # 2. Asociar nombre del producto encima del precio
+            for pa in price_anchors:
+                px, py = pa['x'], pa['y']
+                name_candidates = [
+                    e for e in elements
+                    if 10.0 <= (e['y'] - py) <= 75.0
+                    and abs(e['x'] - px) < 130.0
+                    and not re.search(r'^\d+[.,]?\d*$', e['text'])
+                    and '€' not in e['text']
+                    and e['text'].upper() not in ['ESPECIALIDADES', 'CARNICERÍA', 'OFERTAS', 'NOVIEMBRE', 'PRECIOS', 'TUS CONGELADOS']
+                ]
+                name_candidates = sorted(name_candidates, key=lambda c: -c['y'])
+                name = ' '.join(c['text'] for c in name_candidates).strip()
+                if name and len(name) >= 3:
+                    products.append({
+                        'page': page_idx,
+                        'supplier_product_code': None,
+                        'raw_name': name,
+                        'price': pa['price'],
+                        'unit': pa['unit'],
+                        'format': ''
+                    })
+
+        print(f"✅ [VisualFlyerPdfExtractor] Se extrajeron {len(products)} productos de folleto.")
+        return products
+
+
+# ==============================================================================
+# 5.3. ESTRATEGIA UNIVERSAL ADAPTATIVA (Detección automática de maquetación)
+# ==============================================================================
+
+class UniversalPdfExtractor(BaseCatalogExtractor):
+    """Estrategia Universal que analiza la geometría interna del documento PDF
+    y delega dinámicamente en el motor óptimo:
+    - SpatialCardPdfExtractor para folletos con códigos C-XXXX (Abordo, Dialva).
+    - CoordinateTablePdfExtractor para tablas con columna de precios alineada por Y (Morego).
+    - VisualFlyerPdfExtractor para folletos publicitarios y ofertas multicolumna (Ahumados).
+    - TabularPdfExtractor para listas administrativas convencionales línea a línea (Ferjusanz).
+    """
+    def extract(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+        path = Path(file_path)
+        reader = PdfReader(path)
+        sample_pages = reader.pages[:min(3, len(reader.pages))]
+        
+        code_count = 0
+        has_coord_table = 0
+        multi_price_lines = 0
+        duplicate_coords = 0
+        seen_coords = set()
+
+        for p in sample_pages:
+            txt = p.extract_text() or ""
+            for l in txt.split("\n"):
+                l = l.strip()
+                if not l: continue
+                if len(re.findall(r'€', l)) >= 2:
+                    multi_price_lines += 1
+
+            def visitor(text, cm, tm, font_dict, font_size):
+                t = text.strip()
+                if not t: return
+                nonlocal code_count, duplicate_coords
+                if re.search(r'\b[C|c][:.-]?\s*\d{3,5}\b', t):
+                    code_count += 1
+                key = (round(tm[4], 1), round(tm[5], 1), t)
+                if key in seen_coords:
+                    duplicate_coords += 1
+                else:
+                    seen_coords.add(key)
+            p.extract_text(visitor_text=visitor)
+
+        for p in sample_pages:
+            elements = []
+            def v2(text, cm, tm, font_dict, font_size):
+                t = text.strip()
+                if t: elements.append({'x': round(tm[4], 1), 'y': round(tm[5], 1), 'text': t})
+            p.extract_text(visitor_text=v2)
+            for e in elements:
+                if 'lote' in e['text'].lower() or re.match(r'^\d{4}\s+[A-Z]', e['text']):
+                    matches = [pe for pe in elements if abs(pe['y'] - e['y']) <= 4.0 and pe['x'] > 280.0 and re.search(r'\d+[.,]\d{2}', pe['text'])]
+                    if matches:
+                        has_coord_table += 1
+
+        # Selección de estrategia según huella espacial
+        if code_count >= 3:
+            print(f"🎯 [UniversalPdfExtractor] Detectado catálogo de tarjetas por código ({code_count} anclajes C-XXXX). Usando SpatialCardPdfExtractor...")
+            engine = SpatialCardPdfExtractor(
+                anchor_regex=r'\b[C|c][:.-]?\s*(\d{3,5})\b',
+                header_y_limit=950.0,
+                y_above=40.0,
+                y_below=100.0,
+                x_tolerance=220.0
+            )
+        elif has_coord_table >= 2:
+            print(f"🎯 [UniversalPdfExtractor] Detectada tabla por coordenadas verticales Y ({has_coord_table} lotes). Usando CoordinateTablePdfExtractor...")
+            engine = CoordinateTablePdfExtractor()
+        elif multi_price_lines >= 2 or duplicate_coords >= 5:
+            print("🎯 [UniversalPdfExtractor] Detectado folleto publicitario/flyer. Usando VisualFlyerPdfExtractor...")
+            engine = VisualFlyerPdfExtractor()
+        else:
+            print("🎯 [UniversalPdfExtractor] Detectada lista tabular convencional. Usando TabularPdfExtractor...")
+            engine = TabularPdfExtractor()
+
+        items = engine.extract(file_path)
+        self.detected_supplier = engine.detected_supplier
+        return items
+
+
+# ==============================================================================
 # 5. ESTRATEGIA MULTIMODAL CON GEMINI 1.5 FLASH (Google AI Studio Free Tier)
 # ==============================================================================
 
@@ -603,8 +936,8 @@ class GeminiMultimodalPdfExtractor(BaseCatalogExtractor):
         except Exception as e:
             print(f"⚠️ [GeminiMultimodalPdfExtractor] Excepción global: {e}")
 
-        print("🔄 [GeminiMultimodalPdfExtractor] Activando fallback TabularPdfExtractor...")
-        fallback = TabularPdfExtractor()
+        print("🔄 [GeminiMultimodalPdfExtractor] Activando fallback UniversalPdfExtractor...")
+        fallback = UniversalPdfExtractor()
         items = fallback.extract(file_path)
         self.detected_supplier = fallback.detected_supplier
         return items
@@ -628,9 +961,9 @@ class ExtractorFactory:
         ("pdf", "prov_dialva_04"): DialvaPdfExtractor,
         ("pdf", "dialva"): DialvaPdfExtractor,
         ("pdf", "gemini"): GeminiMultimodalPdfExtractor,
-        ("pdf", "auto"): GeminiMultimodalPdfExtractor,
-        ("pdf", "nuevo"): GeminiMultimodalPdfExtractor,
-        ("pdf", None): GeminiMultimodalPdfExtractor,  # Por defecto IA multimodal para PDFs nuevos
+        ("pdf", "auto"): UniversalPdfExtractor,
+        ("pdf", "nuevo"): UniversalPdfExtractor,
+        ("pdf", None): UniversalPdfExtractor,  # Por defecto extractor universal adaptativo
     }
 
     @classmethod

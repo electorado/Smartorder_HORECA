@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
+import android.provider.OpenableColumns
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -189,10 +190,24 @@ class SuppliersActivity : AppCompatActivity() {
         }
     }
 
+    private fun getFileName(uri: Uri): String {
+        var name = "catalogo.pdf"
+        try {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1 && cursor.moveToFirst()) {
+                    name = cursor.getString(nameIndex)
+                }
+            }
+        } catch (_: Exception) {}
+        return name
+    }
+
     private fun handlePdfPicked(uri: Uri) {
         try {
+            val originalName = getFileName(uri)
             val inputStream = contentResolver.openInputStream(uri)
-            val tempFile = File(cacheDir, "temp_supplier_catalog.pdf")
+            val tempFile = File(cacheDir, originalName)
             FileOutputStream(tempFile).use { out ->
                 inputStream?.copyTo(out)
             }

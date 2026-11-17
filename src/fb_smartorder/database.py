@@ -51,7 +51,7 @@ def init_db(db_name="fb_smartorder"):
         db["productos_brutos"].create_index([("supplier_id", 1)])
         db["productos_brutos"].create_index([("master_ingredient_id", 1)])
         db["ingredientes_maestros"].create_index([("name", 1)], unique=True)
-        db["proveedores"].create_index([("id", 1)], unique=True)
+        db["proveedores"].create_index([("user_email", 1), ("id", 1)], unique=True)
 
         # Semilla de proveedores si la colección está vacía o incompleta
         suppliers_count = db["proveedores"].count_documents({})
