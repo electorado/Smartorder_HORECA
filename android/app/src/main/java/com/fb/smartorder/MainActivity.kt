@@ -817,9 +817,9 @@ class MainActivity : AppCompatActivity() {
                 is ProductsUiState.Error -> {
                     binding.pbLoading.visibility = View.GONE
                     binding.layoutConnectionWarning.visibility = View.VISIBLE
-                    binding.tvConnectionWarningText.text = "⚠️ Sin conexión con backend FastAPI (puerto 8000)"
+                    binding.tvConnectionWarningText.text = "⚠️ Error conectando con el catálogo"
                     binding.tvEmptyMessage.visibility = View.VISIBLE
-                    binding.tvEmptyMessage.text = "No se pudo conectar con el catálogo de ingredientes.\nRevisa la conexión y pulsa Reintentar."
+                    binding.tvEmptyMessage.text = "No se pudo sincronizar el catálogo. Comprueba tu conexión y pulsa Reintentar."
                     binding.rvIngredients.visibility = View.GONE
                 }
             }

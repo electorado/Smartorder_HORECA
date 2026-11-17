@@ -26,21 +26,10 @@ class LoginActivity : AppCompatActivity() {
         binding.etLoginEmail.setText(if (savedEmail.isNotBlank()) savedEmail else "pablo@horeca.com")
         binding.etLoginPassword.setText("password123")
 
-        val currentServer = SessionManager.getServerUrl(this)
-        if (currentServer.isNotBlank()) {
-            binding.etLoginServer.setText(currentServer)
-        }
-
         setupListeners()
     }
 
     private fun setupListeners() {
-        // Alternar ajustes avanzados de servidor
-        binding.btnToggleServerSettings.setOnClickListener {
-            val isVisible = binding.layoutServerSettings.visibility == View.VISIBLE
-            binding.layoutServerSettings.visibility = if (isVisible) View.GONE else View.VISIBLE
-        }
-
         // Navegar a Registro
         binding.btnGoToRegister.setOnClickListener {
             val intent = Intent(this, RegisterActivity::class.java)
@@ -51,15 +40,10 @@ class LoginActivity : AppCompatActivity() {
         binding.btnLoginEnter.setOnClickListener {
             val email = binding.etLoginEmail.text.toString().trim()
             val password = binding.etLoginPassword.text.toString().trim()
-            val server = binding.etLoginServer.text.toString().trim()
 
             if (email.isEmpty() || password.isEmpty()) {
                 Toast.makeText(this, "Por favor, introduce email y contraseña.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
-            }
-
-            if (server.isNotEmpty()) {
-                RetrofitClient.updateBaseUrl(server)
             }
 
             binding.pbLoginLoading.visibility = View.VISIBLE
@@ -77,8 +61,7 @@ class LoginActivity : AppCompatActivity() {
                             this@LoginActivity,
                             chefName = user.name,
                             restaurantName = user.restaurantName,
-                            email = user.email,
-                            serverUrl = server
+                            email = user.email
                         )
                         Toast.makeText(this@LoginActivity, "¡Bienvenido, ${user.name}!", Toast.LENGTH_SHORT).show()
                         goToDashboard()
@@ -96,8 +79,7 @@ class LoginActivity : AppCompatActivity() {
                             this@LoginActivity,
                             chefName = "Pablo Moncayo",
                             restaurantName = "Restaurante El Faro",
-                            email = email,
-                            serverUrl = server
+                            email = email
                         )
                         Toast.makeText(this@LoginActivity, "Sesión local iniciada (Modo Autónomo)", Toast.LENGTH_SHORT).show()
                         goToDashboard()

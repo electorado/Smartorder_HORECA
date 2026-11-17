@@ -136,31 +136,6 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
 
-            <!-- Campo: Servidor Backend -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="sans-serif-condensed"
-                android:text="URL Servidor Backend:"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/etProfileServer"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:layout_marginTop="4dp"
-                android:background="@drawable/bg_search_input"
-                android:fontFamily="sans-serif-condensed"
-                android:hint="http://10.0.2.2:8000/ o https://..."
-                android:inputType="textUri"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp" />
-
             <ProgressBar
                 android:id="@+id/pbProfileLoading"
                 android:layout_width="wrap_content"

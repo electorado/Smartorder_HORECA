@@ -166,40 +166,6 @@
                 android:textColor="@color/stamp_red_dark"
                 android:textSize="13sp" />
 
-            <!-- Configurar Servidor (Opcional/Avanzado) -->
-            <TextView
-                android:id="@+id/btnToggleServerSettings"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="6dp"
-                android:fontFamily="sans-serif-condensed"
-                android:text="⚙️ Ajustes de Servidor Backend"
-                android:textColor="@color/text_muted"
-                android:textSize="11sp" />
-
-            <LinearLayout
-                android:id="@+id/layoutServerSettings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <EditText
-                    android:id="@+id/etLoginServer"
-                    android:layout_width="match_parent"
-                    android:layout_height="40dp"
-                    android:background="@drawable/bg_search_input"
-                    android:fontFamily="sans-serif-condensed"
-                    android:hint="http://10.0.2.2:8000/ o https://..."
-                    android:inputType="textUri"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp"
-                    android:textColor="@color/text_primary"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
         </LinearLayout>
 
         <TextView

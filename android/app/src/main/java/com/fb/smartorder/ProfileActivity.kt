@@ -29,14 +29,10 @@ class ProfileActivity : AppCompatActivity() {
         val chef = SessionManager.getChefName(this)
         val restaurant = SessionManager.getRestaurantName(this)
         val email = SessionManager.getUserEmail(this)
-        val server = SessionManager.getServerUrl(this)
 
         binding.etProfileChefName.setText(chef)
         binding.etProfileRestaurant.setText(restaurant)
         binding.tvProfileEmail.text = email
-        if (server.isNotBlank()) {
-            binding.etProfileServer.setText(server)
-        }
     }
 
     private fun setupListeners() {
@@ -47,16 +43,11 @@ class ProfileActivity : AppCompatActivity() {
         binding.btnProfileSave.setOnClickListener {
             val chef = binding.etProfileChefName.text.toString().trim().ifEmpty { "Chef Pablo" }
             val restaurant = binding.etProfileRestaurant.text.toString().trim().ifEmpty { "Restaurante El Faro" }
-            val server = binding.etProfileServer.text.toString().trim()
             val email = SessionManager.getUserEmail(this)
 
             // Guardar localmente
             SessionManager.setChefName(this, chef)
             SessionManager.setRestaurantName(this, restaurant)
-            if (server.isNotEmpty()) {
-                SessionManager.setServerUrl(this, server)
-                RetrofitClient.updateBaseUrl(server)
-            }
 
             // Sincronizar con el backend
             binding.pbProfileLoading.visibility = View.VISIBLE
