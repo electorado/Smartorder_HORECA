@@ -213,12 +213,12 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
 
     def __init__(
         self,
-        anchor_regex: str = r'\b[C|c][:.-]?\s*(\d{3,5})\b',
+        anchor_regex: str = r'[C|c][:.]?\s*(\d{3,5})',
         ignored_section_headers: Optional[Set[str]] = None,
         noise_phrases: Optional[List[str]] = None,
-        x_tolerance: float = 240.0,
-        y_above: float = 75.0,
-        y_below: float = 100.0,
+        x_tolerance: float = 190.0,
+        y_above: float = 85.0,
+        y_below: float = 80.0,
         header_y_limit: float = 950.0,
         save_output: bool = False
     ):
@@ -241,7 +241,14 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
         text = re.sub(r'\b\d+\s*raciones\b', '', text, flags=re.IGNORECASE)
         text = re.sub(r'\b\d+X\d+[A-Za-z]*\b', '', text)
         text = re.sub(r'\s+', ' ', text)
-        return text.strip(' ·-(),')
+        s = text.strip(' ·-,')
+        if s.startswith('(') and s.endswith(')'):
+            s = s[1:-1].strip(' ·-,')
+        if s.count('(') > s.count(')'):
+            s = s.rstrip('(')
+        elif s.count(')') > s.count('('):
+            s = s.rstrip(')')
+        return s.strip()
 
     def extract(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
         path = Path(file_path)
@@ -293,7 +300,7 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
                 m = re.search(self.anchor_regex, e['text'])
                 if m:
                     code_anchors.append({'code': m.group(1), 'x': e['x'], 'y': e['y'], 'idx': i})
-                elif e['text'].isdigit() and len(e['text']) in [3, 4, 5] and i > 0 and 'C:' in filtered_elements[i-1]['text']:
+                elif e['text'].isdigit() and len(e['text']) in [3, 4, 5] and i > 0 and ('C:' in filtered_elements[i-1]['text'] or re.search(r'[C|c][:.-]\s*$', filtered_elements[i-1]['text'])):
                     code_anchors.append({'code': e['text'], 'x': e['x'], 'y': e['y'], 'idx': i})
 
             # 2. Delimitar la tarjeta espacial de cada anclaje
@@ -311,14 +318,14 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
                 name_candidates = [
                     e for e in card_elems
                     if cy - 6.0 <= e['y'] <= cy + self.y_above
-                    and not any(k in e['text'].lower() for k in ['caja:', 'antes:', 'ración', 'le sale'])
+                    and not any(k in e['text'].lower() for k in ['caja:', 'antes:', 'le sale'])
                 ]
                 name_candidates = sorted(name_candidates, key=lambda x: -x['y'])
 
                 name_tokens = []
                 for nc in name_candidates:
                     clean_t = self._clean_product_name(nc['text'])
-                    clean_t = re.sub(r'\b[C|c][:.-]?\s*\d+\b', '', clean_t, flags=re.IGNORECASE).strip(' ·-(),')
+                    clean_t = re.sub(r'\b[C|c][:.-]?\s*\d+\b', '', clean_t, flags=re.IGNORECASE).strip(' ·-,')
                     if clean_t and not clean_t.isdigit() and '€' not in clean_t and len(clean_t) > 1:
                         name_tokens.append(clean_t)
 
@@ -340,17 +347,30 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
                         format_str = fm3.group(1)
                         break
 
-                # Precio y unidad de medida (y <= cy)
+                # Precio y unidad de medida (agrupación de líneas de precio por coordenada Y)
                 price_elems = [e for e in card_elems if e['y'] <= cy]
+                lines_by_y = {}
+                for pe in price_elems:
+                    found_y = None
+                    for yb in lines_by_y:
+                        if abs(pe['y'] - yb) <= 3.5:
+                            found_y = yb
+                            break
+                    if found_y is None:
+                        found_y = pe['y']
+                        lines_by_y[found_y] = []
+                    lines_by_y[found_y].append(pe)
+
                 price_val = 0.0
                 unit_val = 'kg'
 
-                # Prioridad 1: Precio explícito con unidad (€/kg, €/ud, €/caja) sin texto publicitario
-                for pe in price_elems:
-                    tu = pe['text'].lower()
-                    if any(np in tu for np in ['antes', 'le sale', 'ración']):
+                # Prioridad 1: Precio explícito con unidad (€/kg, €/ud, €/caja, €/tarta, €/estuche)
+                for yb in sorted(lines_by_y.keys(), key=lambda y: -y):
+                    row_elems = sorted(lines_by_y[yb], key=lambda e: e['x'])
+                    line_str = ' '.join(e['text'] for e in row_elems)
+                    if any(np in line_str.lower() for np in ['antes', 'le sale']):
                         continue
-                    pm = re.search(r'([\d]+[.,\'’]\d{1,2})\s*€\s*/\s*([a-záéíóú]+)', pe['text'], re.IGNORECASE)
+                    pm = re.search(r'([\d]+[.,\'’]\d{1,2})\s*€\s*/\s*([a-záéíóú]+)', line_str, re.IGNORECASE)
                     if pm:
                         val = float(pm.group(1).replace(',', '.').replace('\'', '.').replace('’', '.'))
                         if 0.5 <= val <= 500.0:
@@ -358,24 +378,25 @@ class SpatialCardPdfExtractor(BaseCatalogExtractor):
                             unit_val = pm.group(2).lower()
                             break
 
-                # Prioridad 2: Número con símbolo € directo
+                # Prioridad 2: Número con símbolo € directo en la línea
                 if price_val == 0.0:
-                    for pe in price_elems:
-                        tu = pe['text'].lower()
-                        if any(np in tu for np in ['antes', 'le sale', 'ración']):
+                    for yb in sorted(lines_by_y.keys(), key=lambda y: -y):
+                        row_elems = sorted(lines_by_y[yb], key=lambda e: e['x'])
+                        line_str = ' '.join(e['text'] for e in row_elems)
+                        if any(np in line_str.lower() for np in ['antes', 'le sale']):
                             continue
-                        pm = re.search(r'([\d]+[.,\'’]\d{1,2})\s*€', pe['text'], re.IGNORECASE)
+                        pm = re.search(r'([\d]+[.,\'’]\d{1,2})\s*€', line_str, re.IGNORECASE)
                         if pm:
                             val = float(pm.group(1).replace(',', '.').replace('\'', '.').replace('’', '.'))
                             if 0.5 <= val <= 500.0:
                                 price_val = val
                                 break
 
-                # Prioridad 3: Número suelto en la tarjeta si tiene € cercano
+                # Prioridad 3: Número suelto en la tarjeta si tiene precio numérico estándar
                 if price_val == 0.0:
                     for pe in price_elems:
                         tu = pe['text'].lower()
-                        if any(np in tu for np in ['antes', 'le sale', 'ración']):
+                        if any(np in tu for np in ['antes', 'le sale']):
                             continue
                         num_m = re.match(r'^([\d]+[.,\'’]\d{1,2})$', pe['text'])
                         if num_m:
@@ -418,9 +439,7 @@ class DialvaPdfExtractor(SpatialCardPdfExtractor):
             ignored_section_headers={
                 'V GAMA', 'EL AUTÉNTICO', 'SABOR DE IT ALIA', 'SABOR DE ITALIA',
                 'Y SUS QUESOS', 'PESCADOS', 'MARISCOS', 'CEFALÓPODOS',
-                'EMBUTIDOS', 'CERDO', 'CERDO IBÉRICO DE', 'B E L LOTA', 'BELLOTA',
-                'VACUNO', 'OFERTAS', 'DIALVA', 'PÁGINA', 'SEPTIEMBRE', '2026', 'CATALOGO',
-                'FUMET DE', 'PESCADO', 'DE ROCA'
+                'EMBUTIDOS', 'VACUNO', 'OFERTAS', 'DIALVA', 'PÁGINA', 'SEPTIEMBRE', '2026', 'CATALOGO'
             },
             noise_phrases=[
                 'POLÍGONO VIRGEN', 'DIALVA@', 'WWW.COMERCIALDIALVA', 'TELF.', '46950 XIRIVELLA',
@@ -430,9 +449,9 @@ class DialvaPdfExtractor(SpatialCardPdfExtractor):
                 'OBTIENES APROXIMADAMENTE', 'COSTE REAL DEL CALDO'
             ],
             x_tolerance=190.0,
-            y_above=75.0,
-            y_below=65.0,
-            header_y_limit=780.0,
+            y_above=85.0,
+            y_below=80.0,
+            header_y_limit=950.0,
             save_output=save_output
         )
 
@@ -729,9 +748,15 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
         multi_price_lines = 0
         duplicate_coords = 0
         seen_coords = set()
+        is_dialva = False
 
         for p in sample_pages:
             txt = p.extract_text() or ""
+            if "dialva" in txt.lower():
+                is_dialva = True
+            # Contar anclajes de código tanto en el texto extraído como en tokens
+            code_count += len(re.findall(r'[C|c][:.-]?\s*\d{3,5}', txt))
+
             for l in txt.split("\n"):
                 l = l.strip()
                 if not l: continue
@@ -741,9 +766,7 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
             def visitor(text, cm, tm, font_dict, font_size):
                 t = text.strip()
                 if not t: return
-                nonlocal code_count, duplicate_coords
-                if re.search(r'\b[C|c][:.-]?\s*\d{3,5}\b', t):
-                    code_count += 1
+                nonlocal duplicate_coords
                 key = (round(tm[4], 1), round(tm[5], 1), t)
                 if key in seen_coords:
                     duplicate_coords += 1
@@ -764,14 +787,17 @@ class UniversalPdfExtractor(BaseCatalogExtractor):
                         has_coord_table += 1
 
         # Selección de estrategia según huella espacial
-        if code_count >= 3:
+        if is_dialva or "dialva" in path.stem.lower():
+            print("🎯 [UniversalPdfExtractor] Detectado catálogo de DIALVA Hostelería. Usando DialvaPdfExtractor...")
+            engine = DialvaPdfExtractor()
+        elif code_count >= 3:
             print(f"🎯 [UniversalPdfExtractor] Detectado catálogo de tarjetas por código ({code_count} anclajes C-XXXX). Usando SpatialCardPdfExtractor...")
             engine = SpatialCardPdfExtractor(
-                anchor_regex=r'\b[C|c][:.-]?\s*(\d{3,5})\b',
+                anchor_regex=r'[C|c][:.]?\s*(\d{3,5})',
                 header_y_limit=950.0,
-                y_above=40.0,
-                y_below=100.0,
-                x_tolerance=220.0
+                y_above=85.0,
+                y_below=80.0,
+                x_tolerance=190.0
             )
         elif has_coord_table >= 2:
             print(f"🎯 [UniversalPdfExtractor] Detectada tabla por coordenadas verticales Y ({has_coord_table} lotes). Usando CoordinateTablePdfExtractor...")

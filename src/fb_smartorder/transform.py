@@ -145,10 +145,10 @@ def normalize_metric_dimension(
         }
 
     # 3. Empaques compuestos: Nuds X M kg/gr/L/ml (ej. 14uds X 1kg, 12ud X 0,25kg)
-    mult_match = re.search(r'(\d+)\s*uds?\s*[xX]\s*([\d.,]+)\s*(k?g|m?l|l)\b', fmt)
+    mult_match = re.search(r'(\d+)\s*uds?\s*[xX]\s*([\d.,\'’]+)\s*(k?g|m?l|l)\b', fmt)
     if mult_match:
         count = float(mult_match.group(1))
-        unit_weight = float(mult_match.group(2).replace(',', '.'))
+        unit_weight = float(mult_match.group(2).replace(',', '.').replace("'", '.').replace('’', '.'))
         measure_unit = mult_match.group(3).lower()
 
         if measure_unit in ["g", "gr"]:
@@ -164,8 +164,8 @@ def normalize_metric_dimension(
         if unit_clean in ["caja", "estuche", "pack", "lote"]:
             total_qty = count * unit_weight
             canonical_price = price / total_qty if total_qty > 0 else price
-        # Si el precio es por sobre/pieza/ud/pizza individual, dividimos entre el peso de una unidad
-        elif unit_clean in ["sobre", "pieza", "pizza", "ud", "unidad"]:
+        # Si el precio es por sobre/pieza/ud/pizza/tarta individual, dividimos entre el peso de una unidad
+        elif unit_clean in ["sobre", "pieza", "pizza", "ud", "unidad", "tarta"]:
             total_qty = unit_weight
             canonical_price = price / total_qty if total_qty > 0 else price
         else:
