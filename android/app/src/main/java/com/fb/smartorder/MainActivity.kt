@@ -74,6 +74,7 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerViews()
         setupSearch()
+        setupCatalogFilterTabs()
         setupBottomNavigation()
         setupOffCatalogButtons()
         setupOrderSubmitButton()
@@ -104,9 +105,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupRecyclerViews() {
         // 1. Adaptador del Catálogo completo
-        catalogAdapter = ProductAdapter { _, _ ->
-            refreshOrderView()
-        }
+        catalogAdapter = ProductAdapter(
+            onQuantityChanged = { prod, qty ->
+                if (qty > 0 && !prod.isFavorite) {
+                    viewModel.toggleFavorite(prod)
+                }
+                refreshOrderView()
+            },
+            onFavoriteToggle = { prod ->
+                viewModel.toggleFavorite(prod) { success ->
+                    if (success) {
+                        catalogAdapter.notifyDataSetChanged()
+                    }
+                }
+            },
+            onEditProduct = { prod ->
+                showEditProductDialog(prod)
+            }
+        )
         binding.rvIngredients.layoutManager = LinearLayoutManager(this)
         binding.rvIngredients.adapter = catalogAdapter
 
@@ -959,5 +975,115 @@ class MainActivity : AppCompatActivity() {
             tv.setBackgroundResource(R.drawable.bg_btn_secondary_retro)
             tv.setTextColor(getColor(R.color.text_primary))
         }
+    }
+
+    private fun setupCatalogFilterTabs() {
+        binding.tabFilterFavorites.setOnClickListener {
+            selectCatalogFilterTab("favorites")
+        }
+        binding.tabFilterAll.setOnClickListener {
+            selectCatalogFilterTab("all")
+        }
+        binding.tabFilterHidden.setOnClickListener {
+            selectCatalogFilterTab("hidden")
+        }
+    }
+
+    private fun selectCatalogFilterTab(mode: String) {
+        catalogAdapter.setFilterMode(mode)
+        val activeBg = ContextCompat.getDrawable(this, R.drawable.bg_btn_retro)
+        val inactiveBg = null
+        val whiteColor = ContextCompat.getColor(this, R.color.white)
+        val mutedColor = ContextCompat.getColor(this, R.color.text_secondary)
+
+        binding.tabFilterFavorites.background = if (mode == "favorites") activeBg else inactiveBg
+        binding.tabFilterFavorites.setTextColor(if (mode == "favorites") whiteColor else mutedColor)
+
+        binding.tabFilterAll.background = if (mode == "all") activeBg else inactiveBg
+        binding.tabFilterAll.setTextColor(if (mode == "all") whiteColor else mutedColor)
+
+        binding.tabFilterHidden.background = if (mode == "hidden") activeBg else inactiveBg
+        binding.tabFilterHidden.setTextColor(if (mode == "hidden") whiteColor else mutedColor)
+    }
+
+    private fun showEditProductDialog(product: Product) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_edit_product, null)
+        val tvOriginal = dialogView.findViewById<TextView>(R.id.tvOriginalInfo)
+        val etName = dialogView.findViewById<EditText>(R.id.etEditProductName)
+        val etPrice = dialogView.findViewById<EditText>(R.id.etEditProductPrice)
+        val spinnerUnit = dialogView.findViewById<Spinner>(R.id.spinnerEditProductUnit)
+        val cbHidden = dialogView.findViewById<CheckBox>(R.id.cbEditIsHidden)
+        val btnReset = dialogView.findViewById<Button>(R.id.btnEditReset)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btnEditCancel)
+        val btnSave = dialogView.findViewById<Button>(R.id.btnEditSave)
+
+        val units = listOf("kg", "ud", "bolsa", "caja", "estuche", "bandeja", "tarrina", "lote")
+        val unitAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, units)
+        spinnerUnit.adapter = unitAdapter
+
+        val origName = product.originalName ?: product.name
+        val origPrice = product.bestPrice?.let { String.format("%.2f", it) } ?: "0.00"
+        val origCode = product.supplierProductCode ?: product.id
+        tvOriginal.text = "Original: $origCode · $origName ($origPrice €/${product.standardUnit})"
+
+        etName.setText(product.customName ?: product.name)
+        etPrice.setText(if (product.bestPrice != null) String.format(java.util.Locale.US, "%.2f", product.bestPrice) else "")
+        val currentUnitIdx = units.indexOf(product.standardUnit).let { if (it >= 0) it else 0 }
+        spinnerUnit.setSelection(currentUnitIdx)
+        cbHidden.isChecked = product.isHidden
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        btnReset.setOnClickListener {
+            viewModel.updateProductOverride(
+                product.id,
+                com.fb.smartorder.model.ProductOverrideRequest(
+                    customName = null,
+                    customPrice = null,
+                    customUnit = null,
+                    isHidden = false
+                )
+            ) { success ->
+                if (success) {
+                    Toast.makeText(this, "Valores originales restablecidos", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                }
+            }
+        }
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        btnSave.setOnClickListener {
+            val newName = etName.text.toString().trim()
+            val newPriceStr = etPrice.text.toString().trim().replace(',', '.')
+            val newPrice = newPriceStr.toDoubleOrNull()
+            val selectedUnit = spinnerUnit.selectedItem.toString()
+            val isHidden = cbHidden.isChecked
+
+            val req = com.fb.smartorder.model.ProductOverrideRequest(
+                customName = if (newName.isNotBlank()) newName else null,
+                customPrice = newPrice,
+                customUnit = selectedUnit,
+                isHidden = isHidden
+            )
+
+            viewModel.updateProductOverride(product.id, req) { success ->
+                if (success) {
+                    product.name = newName.ifBlank { origName }
+                    if (newPrice != null) product.bestPrice = newPrice
+                    product.standardUnit = selectedUnit
+                    product.isHidden = isHidden
+                    catalogAdapter.notifyDataSetChanged()
+                    Toast.makeText(this, "Producto personalizado guardado", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                } else {
+                    Toast.makeText(this, "Error guardando cambios", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        dialog.show()
     }
 }

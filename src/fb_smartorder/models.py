@@ -33,10 +33,23 @@ class RawProduct(BaseModel):
     extracted_at: datetime = Field(default_factory=datetime.utcnow)
     master_ingredient_id: Optional[str] = None
     similarity_score: float = 0.0
+    # Campos de personalización y favoritos
+    is_favorite: bool = False
+    is_hidden: bool = False
+    custom_name: Optional[str] = None
+    custom_price: Optional[float] = None
+    custom_unit: Optional[str] = None
 
     def is_mapped(self) -> bool:
         """Indica si el producto bruto está homologado a un ingrediente maestro."""
         return bool(self.master_ingredient_id)
+
+class ProductOverrideUpdate(BaseModel):
+    custom_name: Optional[str] = Field(None, description="Nombre o alias personalizado asignado por el cocinero")
+    custom_price: Optional[float] = Field(None, description="Precio corregido manualmente por el cocinero")
+    custom_unit: Optional[str] = Field(None, description="Unidad de compra corregida (kg, ud, bolsa, caja, estuche)")
+    is_favorite: Optional[bool] = Field(None, description="Marca el producto como habitual / favorito")
+    is_hidden: Optional[bool] = Field(None, description="Oculta o archiva el producto del catálogo activo")
 
 class MasterIngredient(BaseModel):
     id: str = Field(..., description="ID maestro (ej. ing_tomate_rama)")

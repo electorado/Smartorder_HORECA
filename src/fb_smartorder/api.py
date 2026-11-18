@@ -12,7 +12,8 @@ from bson import ObjectId
 from .database import get_database, init_db, get_db_client, hash_password
 from .models import (
     Order, OrderItem, SupplierSubOrder, Supplier,
-    UserRegister, UserLogin, UserProfile, UserUpdate
+    UserRegister, UserLogin, UserProfile, UserUpdate,
+    ProductOverrideUpdate
 )
 from .extract import extract_excel, extract_pdf, extract_catalog, extract_catalog_with_supplier
 from .transform import resolve_entities
@@ -373,10 +374,11 @@ def get_ingredients(query: Optional[str] = None):
 def get_products(
     query: Optional[str] = Query(None, description="Filtro opcional por nombre o categoría"),
     supplier_id: Optional[str] = Query(None, description="Filtro opcional por proveedor"),
+    filter_type: Optional[str] = Query(None, description="Filtro opcional: 'favorites', 'all', 'hidden'"),
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Devuelve el catálogo de productos y ofertas del cocinero."""
+    """Devuelve el catálogo de productos y ofertas del cocinero con soporte para favoritos, ocultos y personalizaciones."""
     try:
         db = get_database()
         u_email = (x_user_email if isinstance(x_user_email, str) else user_email if isinstance(user_email, str) else "").lower().strip()
@@ -396,31 +398,225 @@ def get_products(
 
         raw_items = list(db["productos_brutos"].find(filter_query))
 
+        # Cargar personalizaciones y favoritos del usuario
+        overrides_by_code = {}
+        overrides_by_id = {}
+        if u_email:
+            for ov in db["product_overrides"].find({"user_email": u_email}):
+                if ov.get("supplier_product_code"):
+                    overrides_by_code[str(ov["supplier_product_code"])] = ov
+                if ov.get("product_id"):
+                    overrides_by_id[str(ov["product_id"])] = ov
+
         masters = {m["id"]: m for m in db["ingredientes_maestros"].find({}, {"_id": 0})}
 
         products = []
         for p in raw_items:
             p_id = str(p["_id"])
+            p_code = str(p.get("supplier_product_code")) if p.get("supplier_product_code") else None
             m_id = p.get("master_ingredient_id")
             master = masters.get(m_id) if m_id else None
 
+            # Aplicar override si existe
+            ov = (overrides_by_code.get(p_code) if p_code else None) or overrides_by_id.get(p_id) or {}
+
+            is_fav = bool(ov.get("is_favorite", p.get("is_favorite", False)))
+            is_hid = bool(ov.get("is_hidden", p.get("is_hidden", False)))
+            c_name = ov.get("custom_name") or p.get("custom_name")
+            c_price = ov.get("custom_price") if ov.get("custom_price") is not None else p.get("custom_price")
+            c_unit = ov.get("custom_unit") or p.get("custom_unit")
+
+            # Filtrado por tipo (favorites, all, hidden)
+            f_type = (filter_type or "").lower().strip()
+            if f_type == "favorites" and (not is_fav or is_hid):
+                continue
+            elif f_type == "hidden" and not is_hid:
+                continue
+            elif f_type not in ["favorites", "hidden"] and is_hid:
+                # En la vista normal 'all' o sin filtro, no mostrar los ocultos
+                continue
+
             cat = p.get("category") or (master.get("category") if master else None) or "General"
-            name = p.get("raw_name") or p.get("clean_name") or "Producto"
-            unit = p.get("unit") or p.get("canonical_unit") or "ud"
-            price = p.get("price") if p.get("price") is not None else p.get("canonical_price")
+            name = c_name or p.get("raw_name") or p.get("clean_name") or "Producto"
+            unit = c_unit or p.get("unit") or p.get("canonical_unit") or "ud"
+            price = c_price if c_price is not None else (p.get("price") if p.get("price") is not None else p.get("canonical_price"))
 
             products.append({
                 "id": p_id,
+                "supplier_product_code": p_code,
                 "name": name,
+                "original_name": p.get("raw_name") or p.get("clean_name"),
                 "category": cat,
                 "standard_unit": unit,
                 "best_price": price,
                 "best_supplier_id": p.get("supplier_id"),
                 "best_supplier_name": p.get("supplier_name"),
-                "available_offers": 1
+                "available_offers": 1,
+                "is_favorite": is_fav,
+                "is_hidden": is_hid,
+                "custom_name": c_name,
+                "custom_price": c_price,
+                "custom_unit": c_unit
             })
 
         return {"products": products}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/v1/products/{product_id}/override")
+def update_product_override(
+    product_id: str,
+    override_data: ProductOverrideUpdate,
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Permite al cocinero personalizar el nombre, precio, unidad, estado favorito u oculto de un producto."""
+    try:
+        db = get_database()
+        u_email = (x_user_email or user_email or "").lower().strip()
+        if not u_email:
+            raise HTTPException(status_code=401, detail="Usuario no autenticado")
+
+        try:
+            prod = db["productos_brutos"].find_one({"_id": ObjectId(product_id)})
+        except Exception:
+            prod = db["productos_brutos"].find_one({"id": product_id})
+
+        if not prod:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+        p_code = prod.get("supplier_product_code")
+        query_key = {"user_email": u_email}
+        if p_code:
+            query_key["supplier_product_code"] = str(p_code)
+        else:
+            query_key["product_id"] = product_id
+
+        update_fields = {}
+        for k, v in override_data.model_dump(exclude_unset=True).items():
+            if v is not None:
+                update_fields[k] = v
+
+        if not update_fields:
+            return {"message": "Sin cambios"}
+
+        update_fields["updated_at"] = datetime.utcnow()
+        if p_code:
+            update_fields["supplier_product_code"] = str(p_code)
+        update_fields["product_id"] = product_id
+
+        db["product_overrides"].update_one(
+            query_key,
+            {"$set": update_fields},
+            upsert=True
+        )
+
+        pb_update = {k: v for k, v in update_fields.items() if k in ["custom_name", "custom_price", "custom_unit", "is_favorite", "is_hidden"]}
+        if pb_update:
+            db["productos_brutos"].update_one(
+                {"_id": prod["_id"]},
+                {"$set": pb_update}
+            )
+
+        return {"status": "ok", "message": "Producto personalizado correctamente", "override": update_fields}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/products/{product_id}/favorite")
+def toggle_favorite(
+    product_id: str,
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Alterna el estado favorito / habitual de un producto."""
+    try:
+        db = get_database()
+        u_email = (x_user_email or user_email or "").lower().strip()
+        if not u_email:
+            raise HTTPException(status_code=401, detail="Usuario no autenticado")
+
+        try:
+            prod = db["productos_brutos"].find_one({"_id": ObjectId(product_id)})
+        except Exception:
+            prod = db["productos_brutos"].find_one({"id": product_id})
+
+        if not prod:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+        p_code = prod.get("supplier_product_code")
+        query_key = {"user_email": u_email}
+        if p_code:
+            query_key["supplier_product_code"] = str(p_code)
+        else:
+            query_key["product_id"] = product_id
+
+        existing = db["product_overrides"].find_one(query_key)
+        curr_fav = existing.get("is_favorite", prod.get("is_favorite", False)) if existing else prod.get("is_favorite", False)
+        new_fav = not curr_fav
+
+        db["product_overrides"].update_one(
+            query_key,
+            {"$set": {"is_favorite": new_fav, "updated_at": datetime.utcnow()}},
+            upsert=True
+        )
+        db["productos_brutos"].update_one(
+            {"_id": prod["_id"]},
+            {"$set": {"is_favorite": new_fav}}
+        )
+
+        return {"status": "ok", "product_id": product_id, "is_favorite": new_fav}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/products/{product_id}/hide")
+def toggle_hide(
+    product_id: str,
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Alterna el estado oculto / archivado de un producto."""
+    try:
+        db = get_database()
+        u_email = (x_user_email or user_email or "").lower().strip()
+        if not u_email:
+            raise HTTPException(status_code=401, detail="Usuario no autenticado")
+
+        try:
+            prod = db["productos_brutos"].find_one({"_id": ObjectId(product_id)})
+        except Exception:
+            prod = db["productos_brutos"].find_one({"id": product_id})
+
+        if not prod:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+        p_code = prod.get("supplier_product_code")
+        query_key = {"user_email": u_email}
+        if p_code:
+            query_key["supplier_product_code"] = str(p_code)
+        else:
+            query_key["product_id"] = product_id
+
+        existing = db["product_overrides"].find_one(query_key)
+        curr_hid = existing.get("is_hidden", prod.get("is_hidden", False)) if existing else prod.get("is_hidden", False)
+        new_hid = not curr_hid
+
+        db["product_overrides"].update_one(
+            query_key,
+            {"$set": {"is_hidden": new_hid, "updated_at": datetime.utcnow()}},
+            upsert=True
+        )
+        db["productos_brutos"].update_one(
+            {"_id": prod["_id"]},
+            {"$set": {"is_hidden": new_hid}}
+        )
+
+        return {"status": "ok", "product_id": product_id, "is_hidden": new_hid}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -694,6 +890,43 @@ def create_order(
         order_id = str(res.inserted_id)
         order_dict["id"] = order_id
         order_dict["_id"] = order_id
+
+        # Smart Habitualization: Auto-marcar como habituales/favoritos los productos pedidos
+        for item in order_data.items:
+            try:
+                p_match = None
+                it_id = getattr(item, "ingredient_id", None)
+                if it_id:
+                    try:
+                        p_match = db["productos_brutos"].find_one({"_id": ObjectId(it_id)})
+                    except Exception:
+                        p_match = db["productos_brutos"].find_one({"id": it_id, "user_email": u_email})
+                if not p_match and getattr(item, "ingredient_name", None):
+                    p_match = db["productos_brutos"].find_one({
+                        "user_email": u_email,
+                        "$or": [
+                            {"raw_name": item.ingredient_name},
+                            {"clean_name": item.ingredient_name.lower()}
+                        ]
+                    })
+                if p_match:
+                    p_code = p_match.get("supplier_product_code")
+                    q_ov = {"user_email": u_email}
+                    if p_code:
+                        q_ov["supplier_product_code"] = str(p_code)
+                    else:
+                        q_ov["product_id"] = str(p_match["_id"])
+                    db["product_overrides"].update_one(
+                        q_ov,
+                        {"$set": {"is_favorite": True, "updated_at": datetime.utcnow()}},
+                        upsert=True
+                    )
+                    db["productos_brutos"].update_one(
+                        {"_id": p_match["_id"]},
+                        {"$set": {"is_favorite": True}}
+                    )
+            except Exception as fav_err:
+                print(f"⚠️ Error auto-marcando favorito: {fav_err}")
 
         return {
             "message": "Pedido consolidado creado con éxito.",

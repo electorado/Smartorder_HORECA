@@ -133,7 +133,7 @@ def detect_supplier_from_pdf(reader: PdfReader, path: Path) -> Dict[str, Any]:
     # 1. Identificación por marca conocida HORECA
     if "dialva" in stem_lower or "dialva" in full_text.lower():
         supp_name = "DIALVA Hostelería S.L."
-    elif "abordo" in stem_lower or "abordo" in full_text.lower() or "servifrio" in full_text.lower():
+    elif "abordo" in stem_lower or "abordo" in full_text.lower() or "servifrio" in full_text.lower() or len(re.findall(r'\bC-\d{3,5}\b', full_text)) >= 2:
         supp_name = "Abordo Hostelería / Servifrío"
     elif "ferjusanz" in stem_lower or "ferjusanz" in full_text.lower():
         supp_name = "VERDURA FERJUSANZ C.B"
@@ -195,6 +195,14 @@ def detect_supplier_from_pdf(reader: PdfReader, path: Path) -> Dict[str, Any]:
         cand_email = email_m.group(1).lower().strip()
         if not any(d in cand_email for d in ["adobe.com", "google.com", "example.com", "pedidos@proveedor"]):
             email = cand_email
+
+    if supp_name == "Abordo Hostelería / Servifrío":
+        if not phone:
+            phone = "961548112"
+        if not email:
+            email = "pedidos@abordo.es"
+        if not cif:
+            cif = "B-96452814"
 
     return {"name": supp_name, "cif": cif, "phone": phone, "email": email}
 
@@ -496,7 +504,6 @@ class AbordoPdfExtractor(BaseCatalogExtractor):
 
         for page_idx, page in enumerate(reader.pages, start=1):
             page_width = float(page.mediabox.width) if hasattr(page, 'mediabox') and page.mediabox else 595.0
-            midpoint = page_width / 2.0
             elements = []
 
             def visitor(text, cm, tm, font_dict, font_size):
@@ -519,8 +526,11 @@ class AbordoPdfExtractor(BaseCatalogExtractor):
                 if m:
                     anchors.append({'code': m.group(1), 'x': e['x'], 'y': e['y']})
 
-            left_anchors = sorted([a for a in anchors if a['x'] < midpoint], key=lambda a: -a['y'])
-            right_anchors = sorted([a for a in anchors if a['x'] >= midpoint], key=lambda a: -a['y'])
+            # Los anclajes de columna izquierda tienen X < 220, y los de columna derecha X > 295.
+            # Los elementos de texto/precio de columna izquierda se extienden hasta X ~ 280,
+            # y los de columna derecha empiezan a partir de X ~ 285.
+            left_anchors = sorted([a for a in anchors if a['x'] < 250.0], key=lambda a: -a['y'])
+            right_anchors = sorted([a for a in anchors if a['x'] >= 250.0], key=lambda a: -a['y'])
 
             for col_anchors, is_left in [(left_anchors, True), (right_anchors, False)]:
                 for i, a in enumerate(col_anchors):
@@ -531,7 +541,7 @@ class AbordoPdfExtractor(BaseCatalogExtractor):
 
                     card_elems = [
                         e for e in filtered
-                        if (e['x'] < midpoint if is_left else e['x'] >= midpoint)
+                        if (e['x'] < 285.0 if is_left else e['x'] >= 285.0)
                         and bottom_y <= e['y'] <= top_y
                     ]
 
@@ -596,7 +606,21 @@ class AbordoPdfExtractor(BaseCatalogExtractor):
                             m_eur = re.search(r'(\d+[.,]\d{2})\s*€', cleaned, re.I)
                             if m_eur:
                                 price = float(m_eur.group(1).replace(',', '.'))
-                                unit = 'kg'
+                                combined_desc = f"{full_title} {fmt} {full_card_text}".lower()
+                                if any(t in combined_desc for t in ['tarta', 'pastel', 'brazo', 'tiramisú', 'tiramisu', 'postre']):
+                                    unit = 'ud'
+                                elif 'bolsa' in combined_desc:
+                                    unit = 'bolsa'
+                                elif 'estuche' in combined_desc:
+                                    unit = 'estuche'
+                                elif 'tarrina' in combined_desc:
+                                    unit = 'tarrina'
+                                elif 'bandeja' in combined_desc:
+                                    unit = 'bandeja'
+                                elif '1 unidad' in combined_desc or 'unidades' in fmt.lower():
+                                    unit = 'ud'
+                                else:
+                                    unit = 'kg'
 
                     if full_title and price > 0:
                         products.append({

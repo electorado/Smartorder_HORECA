@@ -414,6 +414,51 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <!-- Filtro Segmentado de Catálogo: Habituales ⭐ | Todos 📋 | Ocultos 👁️ -->
+        <LinearLayout
+            android:id="@+id/layoutCatalogFilterTabs"
+            android:layout_width="match_parent"
+            android:layout_height="34dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_search_dashed"
+            android:orientation="horizontal"
+            android:padding="2dp">
+
+            <TextView
+                android:id="@+id/tabFilterFavorites"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/bg_btn_retro"
+                android:gravity="center"
+                android:text="⭐ Habituales"
+                android:textColor="@color/white"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tabFilterAll"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="📋 Todos"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tabFilterHidden"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="👁️ Ocultos"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
         <!-- Filtro Horizontal por Proveedor -->
         <HorizontalScrollView
             android:id="@+id/hsvSupplierFilter"

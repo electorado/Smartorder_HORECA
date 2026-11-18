@@ -32,8 +32,25 @@ interface ApiService {
     @GET("api/v1/products")
     suspend fun getProducts(
         @Query("query") query: String? = null,
-        @Query("supplier_id") supplierId: String? = null
+        @Query("supplier_id") supplierId: String? = null,
+        @Query("filter_type") filterType: String? = null
     ): Response<ProductsResponse>
+
+    @PATCH("api/v1/products/{product_id}/override")
+    suspend fun updateProductOverride(
+        @Path("product_id") productId: String,
+        @Body req: ProductOverrideRequest
+    ): Response<Map<String, Any>>
+
+    @POST("api/v1/products/{product_id}/favorite")
+    suspend fun toggleFavorite(
+        @Path("product_id") productId: String
+    ): Response<Map<String, Any>>
+
+    @POST("api/v1/products/{product_id}/hide")
+    suspend fun toggleHide(
+        @Path("product_id") productId: String
+    ): Response<Map<String, Any>>
 
     @POST("api/v1/orders")
     suspend fun createOrder(

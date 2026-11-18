@@ -30,14 +30,58 @@ class ProductViewModel(
         loadProducts()
     }
 
-    fun loadProducts(query: String? = null, supplierId: String? = null) {
+    fun loadProducts(
+        query: String? = null,
+        supplierId: String? = null,
+        filterType: String? = null
+    ) {
         _uiState.value = ProductsUiState.Loading
         viewModelScope.launch {
-            val result = repository.getProducts(query = query, supplierId = supplierId)
+            val result = repository.getProducts(query = query, supplierId = supplierId, filterType = filterType)
             result.onSuccess { list ->
                 _uiState.value = ProductsUiState.Success(list)
             }.onFailure { error ->
                 _uiState.value = ProductsUiState.Error(error.message ?: "Network error")
+            }
+        }
+    }
+
+    fun toggleFavorite(product: Product, onComplete: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch {
+            val result = repository.toggleFavorite(product.id)
+            if (result.isSuccess) {
+                product.isFavorite = !product.isFavorite
+                onComplete?.invoke(true)
+            } else {
+                onComplete?.invoke(false)
+            }
+        }
+    }
+
+    fun toggleHide(product: Product, onComplete: ((Boolean) -> Unit)? = null) {
+        viewModelScope.launch {
+            val result = repository.toggleHide(product.id)
+            if (result.isSuccess) {
+                product.isHidden = !product.isHidden
+                onComplete?.invoke(true)
+            } else {
+                onComplete?.invoke(false)
+            }
+        }
+    }
+
+    fun updateProductOverride(
+        productId: String,
+        req: ProductOverrideRequest,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            val result = repository.updateProductOverride(productId, req)
+            if (result.isSuccess) {
+                loadProducts()
+                onComplete?.invoke(true)
+            } else {
+                onComplete?.invoke(false)
             }
         }
     }

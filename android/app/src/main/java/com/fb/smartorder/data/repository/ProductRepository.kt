@@ -13,12 +13,55 @@ class ProductRepository(
     private val api: ApiService = RetrofitClient.apiService
 ) {
 
-    suspend fun getProducts(query: String? = null, supplierId: String? = null): Result<List<Product>> {
+    suspend fun getProducts(
+        query: String? = null,
+        supplierId: String? = null,
+        filterType: String? = null
+    ): Result<List<Product>> {
         return try {
-            val response = api.getProducts(query = query, supplierId = supplierId)
+            val response = api.getProducts(query = query, supplierId = supplierId, filterType = filterType)
             if (response.isSuccessful) {
                 val list = response.body()?.products ?: emptyList()
                 Result.success(list)
+            } else {
+                Result.failure(Exception("HTTP ${response.code()}: ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateProductOverride(productId: String, req: ProductOverrideRequest): Result<Unit> {
+        return try {
+            val response = api.updateProductOverride(productId, req)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("HTTP ${response.code()}: ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun toggleFavorite(productId: String): Result<Unit> {
+        return try {
+            val response = api.toggleFavorite(productId)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("HTTP ${response.code()}: ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun toggleHide(productId: String): Result<Unit> {
+        return try {
+            val response = api.toggleHide(productId)
+            if (response.isSuccessful) {
+                Result.success(Unit)
             } else {
                 Result.failure(Exception("HTTP ${response.code()}: ${response.message()}"))
             }

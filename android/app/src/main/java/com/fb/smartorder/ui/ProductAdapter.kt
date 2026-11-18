@@ -8,7 +8,9 @@ import com.fb.smartorder.databinding.ItemIngredientBinding
 import com.fb.smartorder.model.Product
 
 class ProductAdapter(
-    private val onQuantityChanged: ((Product, Int) -> Unit)? = null
+    private val onQuantityChanged: ((Product, Int) -> Unit)? = null,
+    private val onFavoriteToggle: ((Product) -> Unit)? = null,
+    private val onEditProduct: ((Product) -> Unit)? = null
 ) : RecyclerView.Adapter<ProductAdapter.ProductViewHolder>() {
 
     private val fullList = mutableListOf<Product>()
@@ -16,6 +18,7 @@ class ProductAdapter(
     private val quantities = mutableMapOf<String, Int>()
     private val selectedIds = mutableSetOf<String>()
     var showOnlySelected: Boolean = false
+    private var filterMode: String = "favorites" // "favorites", "all", "hidden"
     private var currentQuery: String = ""
     private var selectedSupplierId: String? = null
 
@@ -47,6 +50,11 @@ class ProductAdapter(
         applyFilters()
     }
 
+    fun setFilterMode(mode: String) {
+        filterMode = mode
+        applyFilters()
+    }
+
     private fun normalize(text: String): String {
         return java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
             .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
@@ -64,6 +72,22 @@ class ProductAdapter(
                 // Las notas, observaciones e ítems ad-hoc fuera de catálogo NO deben mostrarse en el catálogo oficial
                 if (!showOnlySelected && prod.id.startsWith("custom_")) {
                     return@filter false
+                }
+
+                // Filtrar según el modo de catálogo seleccionado (Habituales, Todos, Ocultos)
+                // Nota: Si el usuario tiene productos en su comanda actual (showOnlySelected=true), no restringir por modo
+                if (!showOnlySelected) {
+                    when (filterMode) {
+                        "favorites" -> {
+                            if (!prod.isFavorite || prod.isHidden) return@filter false
+                        }
+                        "hidden" -> {
+                            if (!prod.isHidden) return@filter false
+                        }
+                        else -> { // "all"
+                            if (prod.isHidden) return@filter false
+                        }
+                    }
                 }
 
                 val normName = normalize(prod.name)
@@ -160,9 +184,26 @@ class ProductAdapter(
 
             binding.tvProductName.text = product.name.uppercase()
 
-            val priceFormatted = if (product.bestPrice != null && product.bestPrice > 0) {
+            // Botón de Favorito / Habitual (⭐)
+            binding.btnFavorite.text = if (product.isFavorite) "★" else "☆"
+            binding.btnFavorite.setOnClickListener {
+                onFavoriteToggle?.invoke(product)
+                binding.btnFavorite.text = if (product.isFavorite) "★" else "☆"
+            }
+
+            // Botón de Edición Rápida (✏️)
+            binding.btnEditProduct.setOnClickListener {
+                onEditProduct?.invoke(product)
+            }
+
+            val priceFormatted = if (product.bestPrice != null && product.bestPrice!! > 0) {
                 val supplier = product.bestSupplierName ?: "Oferta"
-                "$supplier · ${String.format("%.2f", product.bestPrice)} €/${product.standardUnit}"
+                val base = "$supplier · ${String.format("%.2f", product.bestPrice)} €/${product.standardUnit}"
+                if (product.customPrice != null || product.customName != null || product.customUnit != null) {
+                    "$base  (Personalizado)"
+                } else {
+                    base
+                }
             } else {
                 "Sin ofertas disponibles"
             }
