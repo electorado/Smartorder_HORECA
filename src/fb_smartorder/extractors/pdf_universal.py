@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Union, Optional, Set
 from pypdf import PdfReader
 
 from .base import BaseCatalogExtractor, detect_supplier_from_pdf
-from .pdf_spatial import SpatialCardPdfExtractor
+from .pdf_spatial import SpatialCardPdfExtractor, DialvaPdfExtractor, AbordoPdfExtractor
 from .pdf_tabular import TabularPdfExtractor, CoordinateTablePdfExtractor
 
 

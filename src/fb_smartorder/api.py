@@ -839,7 +839,9 @@ async def upload_catalog(
                 base_clean = re.sub(r"(?i)(?:catalogo|tarifa|lista|precios|noviembre|diciembre|enero|\d{4})", "", base)
                 candidate_name = re.sub(r"[-_]+", " ", base_clean).strip().title() or "Proveedor Nuevo"
 
-            slug = re.sub(r"[^a-z0-9]", "_", candidate_name.lower())[:25].strip("_")
+            import unicodedata
+            norm_name = "".join(c for c in unicodedata.normalize('NFKD', candidate_name.lower()) if not unicodedata.combining(c))
+            slug = re.sub(r"[^a-z0-9]+", "_", norm_name)[:25].strip("_")
             candidate_id = f"prov_{slug}" if slug else f"prov_{int(datetime.utcnow().timestamp())}"
 
             # Buscar si ya existe para este usuario por ID o nombre
