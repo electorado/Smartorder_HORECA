@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Círculo Negro Minimalista -->
+    <path
+        android:fillColor="@color/text_primary"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" />
+    <!-- Sobre interior color papel -->
+    <path
+        android:fillColor="@color/bg_paper"
+        android:pathData="M18,8H6c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h12c0.55,0 1,-0.45 1,-1V9c0,-0.55 -0.45,-1 -1,-1zm-0.5,1.5l-5.5,3.44L6.5,9.5h11zM6.5,15v-4.25l5.06,3.16c0.27,0.17 0.61,0.17 0.88,0l5.06,-3.16V15h-11z" />
+</vector>

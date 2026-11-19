@@ -43,15 +43,11 @@ class SuppliersAdapter(
             binding.tvSupplierItemName.text = supplier.name
             val isEmail = supplier.preferredChannel?.lowercase() == "email"
             if (isEmail) {
-                binding.tvSupplierChannelBadge.setBackgroundResource(com.fb.smartorder.R.drawable.bg_badge_email)
-                binding.tvSupplierChannelBadge.setTextColor(android.graphics.Color.parseColor("#1565C0"))
-                binding.tvSupplierChannelBadge.text = "EMAIL ✉️"
+                binding.ivSupplierChannelBadge.setImageResource(com.fb.smartorder.R.drawable.ic_logo_email)
             } else {
-                binding.tvSupplierChannelBadge.setBackgroundResource(com.fb.smartorder.R.drawable.bg_badge_whatsapp)
-                binding.tvSupplierChannelBadge.setTextColor(android.graphics.Color.parseColor("#2E7D32"))
-                binding.tvSupplierChannelBadge.text = "WHATSAPP 📲"
+                binding.ivSupplierChannelBadge.setImageResource(com.fb.smartorder.R.drawable.ic_logo_whatsapp)
             }
-            binding.tvSupplierChannelBadge.setOnClickListener {
+            binding.ivSupplierChannelBadge.setOnClickListener {
                 onChannelToggle?.invoke(supplier)
             }
             binding.tvSupplierItemPhone.text = "Teléfono: ${supplier.phone ?: "No configurado"}"

@@ -10,13 +10,13 @@
     <string name="urgent_tag">¡Urgente!</string>
 
     <string name="btn_notes_additionals">+ NOTAS PARA EL PROVEEDOR</string>
-    <string name="btn_camera_scan">📷 FOTO NEVERA</string>
+    <string name="btn_camera_scan">FOTO NEVERA</string>
     <string name="btn_upload_catalog">+ CATÁLOGO</string>
     <string name="dialog_notes_title">Notas para el Proveedor</string>
     <string name="dialog_notes_hint">Instrucciones de entrega (ej. Venid antes de las 10:00)</string>
     <string name="dialog_catalog_title">Subir Catálogo de Proveedor</string>
-    <string name="btn_pick_contact">Elegir de Contactos 📱</string>
-    <string name="btn_pick_pdf">Seleccionar PDF 📄</string>
+    <string name="btn_pick_contact">Elegir de Contactos</string>
+    <string name="btn_pick_pdf">Seleccionar PDF</string>
 
     <!-- Landing / Dashboard -->
     <string name="landing_title">F&amp;B SMARTORDER</string>

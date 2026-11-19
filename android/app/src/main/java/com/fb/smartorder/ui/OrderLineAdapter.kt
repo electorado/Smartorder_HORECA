@@ -51,7 +51,7 @@ class OrderLineAdapter(
             val isNote = prod.id.startsWith("custom_note_") || prod.standardUnit == "nota"
 
             if (isNote) {
-                binding.tvLineName.text = "📝 \"${prod.name}\""
+                binding.tvLineName.text = "[NOTA] \"${prod.name}\""
                 binding.tvLineSubtitle.text = "Nota para: ${prod.bestSupplierName ?: "Proveedor"} · Indicación especial"
                 binding.layoutLineStepper.visibility = View.GONE
             } else {

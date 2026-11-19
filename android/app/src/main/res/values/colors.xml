@@ -4,16 +4,17 @@
     <color name="white">#FFFFFFFF</color>
 
     <!-- Vintage diner / Kraft paper theme -->
-    <color name="bg_paper">#F5EFE6</color>
-    <color name="stamp_red">#B82A2A</color>
-    <color name="stamp_red_dark">#962121</color>
+    <color name="bg_paper">#DFCFB5</color>
+    <!-- Rojo ladrillo vintage extraído del cartel de referencia -->
+    <color name="stamp_red">#D05C57</color>
+    <color name="stamp_red_dark">#A8413C</color>
     <color name="text_primary">#1A1A1A</color>
-    <color name="text_secondary">#665E54</color>
-    <color name="text_muted">#9C9283</color>
-    <color name="border_dashed">#BDB3A3</color>
-    <color name="divider_line">#DDD3C3</color>
-    <color name="stepper_bg">#E8DFC8</color>
+    <color name="text_secondary">#554B3E</color>
+    <color name="text_muted">#887965</color>
+    <color name="border_dashed">#9E8B6C</color>
+    <color name="divider_line">#C2B08E</color>
+    <color name="stepper_bg">#D0BF9F</color>
     <color name="button_retro_bg">#1A1A1A</color>
     <color name="button_accent_orange">#D35400</color>
-    <color name="badge_urgent">#B82A2A</color>
+    <color name="badge_urgent">#D05C57</color>
 </resources>

@@ -10,12 +10,15 @@
     android:paddingEnd="16dp"
     android:paddingBottom="12dp">
 
-    <!-- Checkbox vintage -->
-    <CheckBox
-        android:id="@+id/cbSelected"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:buttonTint="@color/text_primary"
+    <!-- Botón de Favorito / Habitual al inicio con icono vectorial minimalista -->
+    <ImageView
+        android:id="@+id/btnFavorite"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:padding="6dp"
+        android:src="@drawable/ic_star_border"
+        android:contentDescription="Favorito"
+        android:background="?attr/selectableItemBackgroundBorderless"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -30,44 +33,18 @@
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/layoutStepper"
-        app:layout_constraintStart_toEndOf="@+id/cbSelected"
+        app:layout_constraintStart_toEndOf="@+id/btnFavorite"
         app:layout_constraintTop_toTopOf="parent">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/tvProductName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/btnFavorite"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingEnd="6dp"
-                android:text="☆"
-                android:textColor="#E67E22"
-                android:textSize="20sp" />
-
-            <TextView
-                android:id="@+id/tvProductName"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:fontFamily="sans-serif-condensed"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                tools:text="PATATAS SACO 25KG" />
-
-            <TextView
-                android:id="@+id/btnEditProduct"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingStart="6dp"
-                android:paddingEnd="2dp"
-                android:text="✏️"
-                android:textSize="14sp" />
-        </LinearLayout>
+            android:fontFamily="sans-serif-condensed"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            tools:text="PATATAS SACO 25KG" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -97,7 +74,7 @@
                 android:paddingEnd="6dp"
                 android:paddingBottom="1dp"
                 android:text="@string/urgent_tag"
-                android:textColor="@color/white"
+                android:textColor="@color/bg_paper"
                 android:textSize="10sp"
                 android:textStyle="bold"
                 android:visibility="gone"
@@ -112,8 +89,9 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
+        android:layout_marginEnd="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/ivProductIcon"
+        app:layout_constraintEnd_toStartOf="@+id/btnEditProduct"
         app:layout_constraintTop_toTopOf="parent">
 
         <TextView
@@ -152,14 +130,15 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- Icono de categoría / bosquejo -->
+    <!-- Botón de Edición Rápida (Lápiz minimalista) al final -->
     <ImageView
-        android:id="@+id/ivProductIcon"
+        android:id="@+id/btnEditProduct"
         android:layout_width="32dp"
         android:layout_height="32dp"
-        android:layout_marginStart="8dp"
-        android:contentDescription="@string/app_name"
-        android:src="@drawable/ic_food_generic"
+        android:padding="6dp"
+        android:src="@drawable/ic_pencil"
+        android:contentDescription="Editar producto"
+        android:background="?attr/selectableItemBackgroundBorderless"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -175,4 +154,3 @@
         app:layout_constraintStart_toStartOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
-

@@ -180,18 +180,21 @@ class ProductAdapter(
 
         fun bind(product: Product) {
             val qty = quantities[product.id] ?: 0
-            val isChecked = selectedIds.contains(product.id)
 
             binding.tvProductName.text = product.name.uppercase()
 
-            // Botón de Favorito / Habitual (⭐)
-            binding.btnFavorite.text = if (product.isFavorite) "★" else "☆"
+            // Botón de Favorito / Habitual (estrella minimalista) a la izquierda
+            binding.btnFavorite.setImageResource(
+                if (product.isFavorite) com.fb.smartorder.R.drawable.ic_star_filled else com.fb.smartorder.R.drawable.ic_star_border
+            )
             binding.btnFavorite.setOnClickListener {
                 onFavoriteToggle?.invoke(product)
-                binding.btnFavorite.text = if (product.isFavorite) "★" else "☆"
+                binding.btnFavorite.setImageResource(
+                    if (product.isFavorite) com.fb.smartorder.R.drawable.ic_star_filled else com.fb.smartorder.R.drawable.ic_star_border
+                )
             }
 
-            // Botón de Edición Rápida (✏️)
+            // Botón de Edición Rápida (✏️) al final
             binding.btnEditProduct.setOnClickListener {
                 onEditProduct?.invoke(product)
             }
@@ -212,9 +215,6 @@ class ProductAdapter(
             // Badge de oferta / urgente si tiene más de 1 proveedor o precio ventajoso
             binding.tvUrgentBadge.visibility = if (product.availableOffers > 1) View.VISIBLE else View.GONE
 
-            // Desvincular listener antes de asignar estado para evitar disparos accidentales en reciclado
-            binding.cbSelected.setOnCheckedChangeListener(null)
-            binding.cbSelected.isChecked = isChecked
             binding.tvQuantity.text = qty.toString()
 
             // Eventos de usuario
@@ -223,7 +223,6 @@ class ProductAdapter(
                 quantities[product.id] = newQty
                 selectedIds.add(product.id)
                 binding.tvQuantity.text = newQty.toString()
-                binding.cbSelected.isChecked = true
                 onQuantityChanged?.invoke(product, newQty)
             }
 
@@ -236,27 +235,9 @@ class ProductAdapter(
                     } else {
                         quantities.remove(product.id)
                         selectedIds.remove(product.id)
-                        binding.cbSelected.isChecked = false
                     }
                     binding.tvQuantity.text = newQty.toString()
                     onQuantityChanged?.invoke(product, newQty)
-                }
-            }
-
-            binding.cbSelected.setOnClickListener {
-                val checked = binding.cbSelected.isChecked
-                if (checked) {
-                    selectedIds.add(product.id)
-                    val current = quantities[product.id] ?: 0
-                    val newQty = if (current > 0) current else 1
-                    quantities[product.id] = newQty
-                    binding.tvQuantity.text = newQty.toString()
-                    onQuantityChanged?.invoke(product, newQty)
-                } else {
-                    selectedIds.remove(product.id)
-                    quantities.remove(product.id)
-                    binding.tvQuantity.text = "0"
-                    onQuantityChanged?.invoke(product, 0)
                 }
             }
         }

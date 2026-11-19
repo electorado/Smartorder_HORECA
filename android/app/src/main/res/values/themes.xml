@@ -2,7 +2,7 @@
     <style name="Theme.FBSmartOrder" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/stamp_red</item>
         <item name="colorPrimaryVariant">@color/stamp_red_dark</item>
-        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorOnPrimary">@color/bg_paper</item>
         <item name="android:windowBackground">@color/bg_paper</item>
         <item name="android:statusBarColor">@color/bg_paper</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
