@@ -111,12 +111,12 @@ def send_order_email_smtp(
     email_body: str,
     db
 ) -> tuple[bool, str]:
-    """Envía el pedido por email al proveedor mediante SMTP (Brevo)."""
+    """Envía el pedido por email al proveedor mediante SMTP (Brevo), con soporte multiport (587, 2525, 465)."""
     import smtplib
+    import ssl
     from email.message import EmailMessage
 
     smtp_host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
     smtp_user = os.getenv("SMTP_USER", "c3e19e001@smtp-brevo.com")
     smtp_pwd = os.getenv("SMTP_PASSWORD", "xsmtpsib-6965a5e17ef4c854c9e1e2b137c506ffffaf43bf1870e770d7a9debcd55e2bcf-1dCRyMTa28bNE0d5")
     smtp_from = os.getenv("SMTP_FROM", "pablomoncayovega@gmail.com")
@@ -132,13 +132,40 @@ def send_order_email_smtp(
     msg["To"] = supplier_email or "pedidos@proveedor.com"
     msg.set_content(email_body)
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
-        if os.getenv("SMTP_USE_TLS", "true").lower() == "true":
-            server.starttls()
-        server.login(smtp_user, smtp_pwd)
-        server.send_message(msg)
+    # Lista de puertos a intentar: 587 (STARTTLS), 2525 (STARTTLS alt), 465 (SSL)
+    port_candidates = [
+        (int(os.getenv("SMTP_PORT", 587)), "tls"),
+        (2525, "tls"),
+        (465, "ssl"),
+    ]
+    seen_ports = set()
+    ports_to_try = []
+    for p, mode in port_candidates:
+        if p not in seen_ports:
+            seen_ports.add(p)
+            ports_to_try.append((p, mode))
 
-    return True, "enviado_smtp"
+    last_error = None
+    for port, mode in ports_to_try:
+        try:
+            if mode == "ssl":
+                ctx = ssl.create_default_context()
+                with smtplib.SMTP_SSL(smtp_host, port, timeout=5, context=ctx) as server:
+                    server.login(smtp_user, smtp_pwd)
+                    server.send_message(msg)
+                    return True, f"enviado_smtp_port_{port}"
+            else:
+                with smtplib.SMTP(smtp_host, port, timeout=5) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_pwd)
+                    server.send_message(msg)
+                    return True, f"enviado_smtp_port_{port}"
+        except Exception as e:
+            last_error = e
+            print(f"[SMTP WARNING] Falló envío por puerto {port}: {e}")
+            continue
+
+    raise RuntimeError(f"Error conectando a Brevo SMTP ({last_error})")
 
 
 def send_password_recovery_email_brevo(
@@ -149,10 +176,10 @@ def send_password_recovery_email_brevo(
 ) -> tuple[bool, str]:
     """Envía la contraseña temporal al usuario a través del servicio SMTP de Brevo."""
     import smtplib
+    import ssl
     from email.message import EmailMessage
 
     smtp_host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
     smtp_user = os.getenv("SMTP_USER", "c3e19e001@smtp-brevo.com")
     smtp_pwd = os.getenv("SMTP_PASSWORD", "xsmtpsib-6965a5e17ef4c854c9e1e2b137c506ffffaf43bf1870e770d7a9debcd55e2bcf-1dCRyMTa28bNE0d5")
     smtp_from = os.getenv("SMTP_FROM", "pablomoncayovega@gmail.com")
@@ -175,13 +202,38 @@ def send_password_recovery_email_brevo(
     )
     msg.set_content(body)
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
-        if os.getenv("SMTP_USE_TLS", "true").lower() == "true":
-            server.starttls()
-        server.login(smtp_user, smtp_pwd)
-        server.send_message(msg)
+    port_candidates = [
+        (int(os.getenv("SMTP_PORT", 587)), "tls"),
+        (2525, "tls"),
+        (465, "ssl"),
+    ]
+    seen_ports = set()
+    ports_to_try = []
+    for p, mode in port_candidates:
+        if p not in seen_ports:
+            seen_ports.add(p)
+            ports_to_try.append((p, mode))
 
-    return True, "enviado_brevo"
+    last_error = None
+    for port, mode in ports_to_try:
+        try:
+            if mode == "ssl":
+                ctx = ssl.create_default_context()
+                with smtplib.SMTP_SSL(smtp_host, port, timeout=5, context=ctx) as server:
+                    server.login(smtp_user, smtp_pwd)
+                    server.send_message(msg)
+                    return True, f"enviado_brevo_port_{port}"
+            else:
+                with smtplib.SMTP(smtp_host, port, timeout=5) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_pwd)
+                    server.send_message(msg)
+                    return True, f"enviado_brevo_port_{port}"
+        except Exception as e:
+            last_error = e
+            continue
+
+    return False, f"error: {str(last_error)}"
 
 
 
@@ -1145,6 +1197,98 @@ def send_order(order_id: str):
             "status": "sent",
             "sent_details": sent_summaries
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@orders_router.get("/test-smtp")
+def test_smtp_connectivity():
+    """Diagnóstico de conectividad con Brevo en múltiples puertos."""
+    import socket
+    results = {}
+    host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
+    ports = [587, 2525, 465, 8025, 25]
+    for port in ports:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2.5)
+            s.connect((host, port))
+            banner = s.recv(1024).decode(errors="ignore")
+            s.close()
+            results[str(port)] = {"status": "OPEN", "banner": banner.strip()[:60]}
+        except Exception as e:
+            results[str(port)] = {"status": "FAILED", "error": str(e)}
+    return {"host": host, "ports": results}
+
+@orders_router.post("/{order_id}/dispatch-email")
+def dispatch_order_email(
+    order_id: str,
+    supplier_id: Optional[str] = Query(None),
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Envía directamente el pedido al proveedor por correo mediante SMTP (Brevo)."""
+    try:
+        db = get_database()
+        u_email = resolve_user_email(x_user_email, user_email)
+        try:
+            query = {"_id": ObjectId(order_id)}
+        except Exception:
+            query = {"id": order_id}
+
+        order = db["pedidos"].find_one(query)
+        if not order:
+            raise HTTPException(status_code=404, detail="Pedido no encontrado.")
+
+        suborders = order.get("supplier_suborders", [])
+        dispatched_count = 0
+        errors = []
+
+        for so in suborders:
+            s_id = so.get("supplier_id")
+            if supplier_id and s_id != supplier_id:
+                continue
+
+            s_name = so.get("supplier_name", "Proveedor")
+            s_email = so.get("supplier_email") or ""
+            if not s_email:
+                errors.append(f"{s_name}: no tiene dirección de email configurada")
+                continue
+
+            body = so.get("whatsapp_text") or "Pedido F&B SmartOrder"
+            try:
+                ok, status = send_order_email_smtp(
+                    supplier_name=s_name,
+                    supplier_email=s_email,
+                    user_email=order.get("user_email") or u_email,
+                    email_body=body,
+                    db=db
+                )
+                so["email_dispatched"] = True
+                so["email_status"] = status
+                so["dispatched_at"] = datetime.utcnow()
+                dispatched_count += 1
+            except Exception as e:
+                so["email_dispatched"] = False
+                so["email_status"] = f"error: {str(e)}"
+                errors.append(f"{s_name}: {str(e)}")
+
+        db["pedidos"].update_one(query, {"$set": {"supplier_suborders": suborders}})
+
+        if dispatched_count > 0:
+            return {
+                "success": True,
+                "dispatched_count": dispatched_count,
+                "message": f"Pedido enviado por email a {dispatched_count} proveedor(es) mediante Brevo SMTP.",
+                "suborders": suborders,
+                "errors": errors
+            }
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se pudo enviar por email: {'; '.join(errors) if errors else 'Ningún proveedor seleccionado tiene email'}"
+            )
     except HTTPException:
         raise
     except Exception as e:
