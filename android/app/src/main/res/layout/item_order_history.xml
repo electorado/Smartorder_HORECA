@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
@@ -92,29 +93,22 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
-    <!-- Botón de acción: Reenviar por WhatsApp -->
+    <!-- Botón único: Ver Pedido (Abre Albarán PDF con opción de WhatsApp) -->
     <Button
-        android:id="@+id/btnReopenWhatsApp"
+        android:id="@+id/btnViewOrder"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
+        android:layout_height="wrap_content"
+        android:minHeight="42dp"
         android:layout_marginTop="10dp"
-        android:background="@drawable/bg_btn_secondary_retro"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:backgroundTint="@color/button_retro_bg"
         android:fontFamily="sans-serif-condensed"
-        android:text="Ver / Reenviar por WhatsApp 💬"
-        android:textColor="@color/text_primary"
-        android:textSize="13sp"
-        android:textStyle="bold" />
-
-    <!-- Botón Ver Albarán PDF (CU04 / R04F03) -->
-    <Button
-        android:id="@+id/btnViewOrderPdf"
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/bg_btn_secondary_retro"
-        android:fontFamily="sans-serif-condensed"
-        android:text="📄 Ver Albarán PDF"
-        android:textColor="@color/stamp_red_dark"
+        android:text="VER PEDIDO"
+        app:icon="@drawable/ic_pdf"
+        app:iconGravity="textStart"
+        app:iconTint="@color/bg_paper"
+        android:textColor="@color/bg_paper"
         android:textSize="13sp"
         android:textStyle="bold" />
 

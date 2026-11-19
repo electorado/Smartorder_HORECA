@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/bg_paper"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Cabecera -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:src="@drawable/ic_pdf"
+            app:tint="@color/stamp_red" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvDialogOrderTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="ALBARÁN DE PEDIDO"
+                android:textColor="@color/stamp_red"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvDialogOrderSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="0.00 € · Fecha"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvDialogOrderStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_ok"
+            android:fontFamily="sans-serif-condensed"
+            android:paddingStart="6dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="2dp"
+            android:text="REGISTRADO"
+            android:textColor="@color/button_retro_bg"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@color/divider_line" />
+
+    <!-- Contenido desplazable para la vista previa -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scrollbars="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Proveedores -->
+            <TextView
+                android:id="@+id/tvDialogSuppliers"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Proveedores: ..."
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <!-- Nota del chef si existe -->
+            <TextView
+                android:id="@+id/tvDialogChefNotes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Nota: ..."
+                android:textColor="@color/button_accent_orange"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
+            <!-- Vista Previa Visual del Albarán PDF -->
+            <FrameLayout
+                android:id="@+id/layoutPdfPreviewContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_search_dashed"
+                android:padding="6dp">
+
+                <ImageView
+                    android:id="@+id/ivDialogPdfPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:adjustViewBounds="true"
+                    android:maxHeight="320dp"
+                    android:scaleType="fitCenter"
+                    android:background="#FFFFFF"
+                    android:contentDescription="Vista previa del albarán PDF" />
+
+                <!-- Indicador de carga -->
+                <ProgressBar
+                    android:id="@+id/pbPdfRendering"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="sans-serif-condensed"
+                android:gravity="center"
+                android:text="Toca el albarán para abrirlo a pantalla completa"
+                android:textColor="@color/text_muted"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@color/divider_line" />
+
+    <!-- Botón Reenviar por WhatsApp -->
+    <Button
+        android:id="@+id/btnDialogWhatsApp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="44dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:backgroundTint="@color/button_retro_bg"
+        android:fontFamily="sans-serif-condensed"
+        android:text="REENVIAR POR WHATSAPP"
+        app:icon="@drawable/ic_whatsapp"
+        app:iconGravity="textStart"
+        app:iconTint="@color/bg_paper"
+        android:textColor="@color/bg_paper"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- Botón Abrir PDF completo / Imprimir -->
+    <Button
+        android:id="@+id/btnDialogOpenPdf"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="42dp"
+        android:layout_marginTop="6dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:backgroundTint="@color/stamp_red"
+        android:fontFamily="sans-serif-condensed"
+        android:text="VER ALBARÁN COMPLETO (PDF)"
+        app:icon="@drawable/ic_pdf"
+        app:iconGravity="textStart"
+        app:iconTint="@color/bg_paper"
+        android:textColor="@color/bg_paper"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- Cerrar -->
+    <Button
+        android:id="@+id/btnDialogClose"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:layout_marginTop="2dp"
+        android:fontFamily="sans-serif-condensed"
+        android:text="Cerrar"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp" />
+
+</LinearLayout>

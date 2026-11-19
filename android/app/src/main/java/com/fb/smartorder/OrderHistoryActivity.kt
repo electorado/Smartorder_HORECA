@@ -62,8 +62,12 @@ class OrderHistoryActivity : AppCompatActivity() {
             finish()
         }
 
-        binding.navItemHistory.setOnClickListener {
-            binding.rvOrderHistory.smoothScrollToPosition(0)
+        binding.navItemSettings.setOnClickListener {
+            val intent = Intent(this, ProfileActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            startActivity(intent)
+            finish()
         }
 
         binding.navItemSuppliers.setOnClickListener {
@@ -77,11 +81,8 @@ class OrderHistoryActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         adapter = OrderHistoryAdapter(
-            onReopenWhatsApp = { order ->
-                handleWhatsAppClick(order)
-            },
-            onViewPdf = { order ->
-                handleViewPdf(order)
+            onViewOrder = { order ->
+                showOrderDetailDialog(order)
             }
         )
         binding.rvOrderHistory.layoutManager = LinearLayoutManager(this)
@@ -198,6 +199,86 @@ class OrderHistoryActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "Error generando PDF: ${e.message}", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun showOrderDetailDialog(order: OrderDetailResponse) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_order_detail_pdf, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        val shortId = if (!order.id.isNullOrEmpty() && order.id.length > 6) {
+            order.id.takeLast(6).uppercase()
+        } else {
+            order.id ?: "---"
+        }
+
+        dialogView.findViewById<android.widget.TextView>(R.id.tvDialogOrderTitle).text = "ALBARÁN DE PEDIDO #$shortId"
+        dialogView.findViewById<android.widget.TextView>(R.id.tvDialogOrderSubtitle).text =
+            String.format(java.util.Locale.US, "%.2f € · %s", order.totalAmount, order.createdAt?.take(16)?.replace("T", " ") ?: "Reciente")
+
+        val statusText = (order.status ?: "pending").uppercase()
+        dialogView.findViewById<android.widget.TextView>(R.id.tvDialogOrderStatus).text =
+            if (statusText == "SENT") "ENVIADO" else "REGISTRADO"
+
+        val suborders = order.supplierSuborders ?: emptyList()
+        val supplierNames = suborders.map { it.supplierName }.distinct().joinToString(", ")
+        dialogView.findViewById<android.widget.TextView>(R.id.tvDialogSuppliers).text =
+            "Proveedores: ${supplierNames.ifEmpty { "General" }}"
+
+        val tvChefNotes = dialogView.findViewById<android.widget.TextView>(R.id.tvDialogChefNotes)
+        if (!order.chefNotes.isNullOrEmpty()) {
+            tvChefNotes.visibility = View.VISIBLE
+            tvChefNotes.text = "Nota: ${order.chefNotes}"
+        } else {
+            tvChefNotes.visibility = View.GONE
+        }
+
+        val ivPreview = dialogView.findViewById<android.widget.ImageView>(R.id.ivDialogPdfPreview)
+        val pbRendering = dialogView.findViewById<android.widget.ProgressBar>(R.id.pbPdfRendering)
+
+        // Generar albarán PDF y renderizar primera página
+        val prefs = getSharedPreferences("session_prefs", MODE_PRIVATE)
+        val restaurantName = prefs.getString("KEY_RESTAURANT_NAME", "F&B SMARTORDER RESTAURANT") ?: "F&B SMARTORDER RESTAURANT"
+        val chefName = prefs.getString("KEY_CHEF_NAME", "Chef de Turno") ?: "Chef de Turno"
+
+        var pdfFile: java.io.File? = null
+        try {
+            pdfFile = com.fb.smartorder.util.PdfOrderGenerator.generateOrderPdf(this, order, restaurantName, chefName)
+            val thumbnail = com.fb.smartorder.util.PdfOrderGenerator.renderPdfFirstPage(pdfFile, 1.5f)
+            if (thumbnail != null) {
+                ivPreview.setImageBitmap(thumbnail)
+                ivPreview.visibility = View.VISIBLE
+            } else {
+                ivPreview.visibility = View.GONE
+            }
+        } catch (e: Exception) {
+            ivPreview.visibility = View.GONE
+        } finally {
+            pbRendering.visibility = View.GONE
+        }
+
+        // Tocar la vista previa abre el PDF completo
+        ivPreview.setOnClickListener {
+            pdfFile?.let { com.fb.smartorder.util.PdfOrderGenerator.openPdfViewer(this, it) }
+        }
+
+        // Botón abrir PDF externo
+        dialogView.findViewById<android.widget.Button>(R.id.btnDialogOpenPdf).setOnClickListener {
+            pdfFile?.let { com.fb.smartorder.util.PdfOrderGenerator.openPdfViewer(this, it) }
+        }
+
+        // Botón reenviar por WhatsApp
+        dialogView.findViewById<android.widget.Button>(R.id.btnDialogWhatsApp).setOnClickListener {
+            handleWhatsAppClick(order)
+        }
+
+        // Botón cerrar
+        dialogView.findViewById<android.widget.Button>(R.id.btnDialogClose).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 }
 

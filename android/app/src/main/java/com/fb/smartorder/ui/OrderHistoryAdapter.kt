@@ -8,8 +8,7 @@ import com.fb.smartorder.databinding.ItemOrderHistoryBinding
 import com.fb.smartorder.model.OrderDetailResponse
 
 class OrderHistoryAdapter(
-    private val onReopenWhatsApp: (OrderDetailResponse) -> Unit,
-    private val onViewPdf: ((OrderDetailResponse) -> Unit)? = null
+    private val onViewOrder: (OrderDetailResponse) -> Unit
 ) : RecyclerView.Adapter<OrderHistoryAdapter.HistoryViewHolder>() {
 
     private val allOrders = mutableListOf<OrderDetailResponse>()
@@ -81,12 +80,12 @@ class OrderHistoryAdapter(
                 binding.tvHistoryChefNotes.visibility = View.GONE
             }
 
-            binding.btnReopenWhatsApp.setOnClickListener {
-                onReopenWhatsApp(order)
+            binding.root.setOnClickListener {
+                onViewOrder(order)
             }
 
-            binding.btnViewOrderPdf.setOnClickListener {
-                onViewPdf?.invoke(order)
+            binding.btnViewOrder.setOnClickListener {
+                onViewOrder(order)
             }
         }
     }

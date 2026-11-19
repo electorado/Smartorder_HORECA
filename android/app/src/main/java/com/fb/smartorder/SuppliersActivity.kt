@@ -90,8 +90,8 @@ class SuppliersActivity : AppCompatActivity() {
             finish()
         }
 
-        binding.navItemHistory.setOnClickListener {
-            val intent = Intent(this, OrderHistoryActivity::class.java).apply {
+        binding.navItemSettings.setOnClickListener {
+            val intent = Intent(this, ProfileActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
             startActivity(intent)
@@ -119,7 +119,7 @@ class SuppliersActivity : AppCompatActivity() {
                 viewModel.saveSupplier(updated) { result ->
                     binding.pbSuppliersLoading.visibility = View.GONE
                     result.onSuccess {
-                        val badge = if (newChannel == "whatsapp") "WhatsApp 📲" else "Email ✉️"
+                        val badge = if (newChannel == "whatsapp") "WhatsApp" else "Email"
                         Toast.makeText(this, "${supplier.name} cambiado a $badge", Toast.LENGTH_SHORT).show()
                         loadSuppliers()
                     }.onFailure { err ->
@@ -148,8 +148,8 @@ class SuppliersActivity : AppCompatActivity() {
 
     private fun promptUploadCatalogMode(supplierId: String = "auto") {
         val options = arrayOf(
-            "📄 Sustituir Tarifa Completa\n(Borra los productos viejos para evitar descatalogados)",
-            "📑 Anexo / Folleto de Ofertas\n(Añade o actualiza precios puntuales sin borrar el catálogo base)"
+            "Sustituir Tarifa Completa\n(Borra los productos viejos para evitar descatalogados)",
+            "Anexo / Folleto de Ofertas\n(Añade o actualiza precios puntuales sin borrar el catálogo base)"
         )
         AlertDialog.Builder(this)
             .setTitle("¿Qué tipo de catálogo vas a subir?")
@@ -236,7 +236,7 @@ class SuppliersActivity : AppCompatActivity() {
             }
 
             val progressDialog = AlertDialog.Builder(this)
-                .setTitle("Cargando Catálogo 📄")
+                .setTitle("Cargando Catálogo")
                 .setMessage("Extrayendo productos, actualizando tarifas y registrando datos del proveedor...")
                 .setCancelable(false)
                 .create()
@@ -307,7 +307,7 @@ class SuppliersActivity : AppCompatActivity() {
         }
 
         val btnPickFromAgenda = Button(this).apply {
-            text = "📇 Buscar en Contactos del Teléfono"
+            text = "Buscar en Contactos del Teléfono"
             textSize = 12f
             setOnClickListener {
                 pendingTargetForContact = { cName, cPhone ->
@@ -331,11 +331,11 @@ class SuppliersActivity : AppCompatActivity() {
         val isEmailDefault = !initialEmail.isNullOrBlank() && initialPhone.isNullOrBlank()
         val rbWhatsapp = RadioButton(this).apply {
             id = View.generateViewId()
-            text = "WhatsApp 📲"
+            text = "WhatsApp"
         }
         val rbEmail = RadioButton(this).apply {
             id = View.generateViewId()
-            text = "Email ✉️"
+            text = "Email"
         }
         rgChannel.addView(rbWhatsapp)
         rgChannel.addView(rbEmail)
@@ -349,7 +349,7 @@ class SuppliersActivity : AppCompatActivity() {
         layout.addView(tvChannelLabel)
         layout.addView(rgChannel)
 
-        val dialogTitle = if (isNew) "¡Nuevo Proveedor Detectado! 🎉" else "Tarifa de Proveedor Actualizada ✅"
+        val dialogTitle = if (isNew) "¡Nuevo Proveedor Detectado!" else "Tarifa de Proveedor Actualizada"
 
         AlertDialog.Builder(this)
             .setTitle(dialogTitle)
@@ -419,11 +419,11 @@ class SuppliersActivity : AppCompatActivity() {
         }
         val rbWhatsapp = RadioButton(this).apply {
             id = View.generateViewId()
-            text = "WhatsApp 📲"
+            text = "WhatsApp"
         }
         val rbEmail = RadioButton(this).apply {
             id = View.generateViewId()
-            text = "Email ✉️"
+            text = "Email"
         }
         rgChannel.addView(rbWhatsapp)
         rgChannel.addView(rbEmail)
@@ -509,25 +509,25 @@ class SuppliersActivity : AppCompatActivity() {
         val isEmail = supplier.preferredChannel?.lowercase() == "email"
         val rbWhatsapp = RadioButton(this).apply {
             id = View.generateViewId()
-            text = "WhatsApp 📲"
+            text = "WhatsApp"
         }
         val rbEmail = RadioButton(this).apply {
             id = View.generateViewId()
-            text = "Email ✉️"
+            text = "Email"
         }
         rgChannel.addView(rbWhatsapp)
         rgChannel.addView(rbEmail)
         rgChannel.check(if (isEmail) rbEmail.id else rbWhatsapp.id)
 
         val btnUploadPdf = Button(this).apply {
-            text = "📄 Subir Catálogo / Tarifa (PDF)"
+            text = "Subir Catálogo / Tarifa (PDF)"
             setOnClickListener {
                 promptUploadCatalogMode(supplier.id ?: ("prov_" + supplier.name.lowercase().replace(Regex("[^a-z0-9]"), "_")))
             }
         }
 
         val btnSaveToPhone = Button(this).apply {
-            text = "📱 Guardar en Contactos del Teléfono"
+            text = "Guardar en Contactos del Teléfono"
             setOnClickListener {
                 val insertIntent = android.content.Intent(android.content.Intent.ACTION_INSERT).apply {
                     type = ContactsContract.RawContacts.CONTENT_TYPE
@@ -586,7 +586,7 @@ class SuppliersActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNeutralButton("🗑️ Eliminar") { _, _ ->
+            .setNeutralButton("Eliminar") { _, _ ->
                 confirmDeleteSupplier(supplier)
             }
             .setNegativeButton("Cerrar", null)

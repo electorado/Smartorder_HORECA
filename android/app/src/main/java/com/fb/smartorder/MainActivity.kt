@@ -26,6 +26,8 @@ import com.fb.smartorder.ui.OrderLineAdapter
 import com.fb.smartorder.ui.ProductAdapter
 import com.fb.smartorder.ui.ProductViewModel
 import com.fb.smartorder.ui.ProductsUiState
+import com.fb.smartorder.ui.dialogs.OrderDispatchDialog
+import com.fb.smartorder.ui.dialogs.ProductDialogs
 import java.io.File
 import java.io.FileOutputStream
 
@@ -162,9 +164,9 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        // Tab 4: Historial de pedidos
-        binding.navItemHistory.setOnClickListener {
-            startActivity(Intent(this, OrderHistoryActivity::class.java))
+        // Tab 4: Ajustes / Perfil
+        binding.navItemSettings.setOnClickListener {
+            startActivity(Intent(this, ProfileActivity::class.java))
         }
 
         // Tab 5: Directorio de Proveedores
@@ -196,68 +198,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAddOffCatalogDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_add_off_catalog, null)
-        val etDesc = dialogView.findViewById<EditText>(R.id.etOffCatalogDesc)
-        val spinnerSupplier = dialogView.findViewById<Spinner>(R.id.spinnerOffCatalogSupplier)
-        val btnCancel = dialogView.findViewById<Button>(R.id.btnOffCatalogCancel)
-        val btnAdd = dialogView.findViewById<Button>(R.id.btnOffCatalogAdd)
-
-        var loadedSuppliers: List<Supplier> = emptyList()
-
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .create()
-
-        viewModel.getSuppliers { suppliers ->
-            loadedSuppliers = suppliers
-            val supplierNames = if (suppliers.isNotEmpty()) {
-                suppliers.map { it.name }
-            } else {
-                listOf("DIALVA Hostelería S.L.")
-            }
-            val supplierAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, supplierNames)
-            spinnerSupplier.adapter = supplierAdapter
-        }
-
-        btnCancel.setOnClickListener {
-            dialog.dismiss()
-        }
-
-        btnAdd.setOnClickListener {
-            val text = etDesc.text?.toString()?.trim().orEmpty()
-            if (text.isEmpty()) {
-                etDesc.error = "Escribe una nota o indicación"
-                return@setOnClickListener
-            }
-
-            val selectedIndex = spinnerSupplier.selectedItemPosition
-            val selectedSupplier = if (loadedSuppliers.isNotEmpty() && selectedIndex in loadedSuppliers.indices) {
-                loadedSuppliers[selectedIndex]
-            } else {
-                null
-            }
-
-            val supplierId = selectedSupplier?.id ?: "prov_dialva_04"
-            val supplierName = selectedSupplier?.name ?: "DIALVA Hostelería S.L."
-
-            val customNote = Product(
-                id = "custom_note_${System.currentTimeMillis()}",
-                name = text,
-                category = "Nota / Observación",
-                standardUnit = "nota",
-                bestPrice = 0.0,
-                bestSupplierId = supplierId,
-                bestSupplierName = supplierName,
-                availableOffers = 1
-            )
-
+        ProductDialogs.showAddOffCatalogDialog(this, viewModel) { customNote ->
             catalogAdapter.addCustomProduct(customNote, 1)
             refreshOrderView()
-            Toast.makeText(this, "Nota asignada a $supplierName", Toast.LENGTH_SHORT).show()
-            dialog.dismiss()
         }
-
-        dialog.show()
     }
 
     private fun switchTab(tabIndex: Int) {
@@ -339,7 +283,7 @@ class MainActivity : AppCompatActivity() {
 
             binding.tvOrderSummaryCount.text = summaryCount
             binding.tvOrderSummaryTotal.text = String.format("Total: %.2f €", estimatedTotal)
-            binding.tvButtonText.text = "DESPACHAR PEDIDO (${lines.size}) 🚀"
+            binding.tvButtonText.text = "DESPACHAR PEDIDO (${lines.size})"
         }
     }
 
@@ -417,342 +361,9 @@ class MainActivity : AppCompatActivity() {
         suborders: List<SupplierSubOrderResponse>,
         orderDetail: OrderDetailResponse? = null
     ) {
-        if (suborders.isEmpty()) {
-            Toast.makeText(this, "Pedido completado.", Toast.LENGTH_SHORT).show()
-            return
+        OrderDispatchDialog.show(this, orderId, suborders, orderDetail) {
+            clearComandaAndRefresh()
         }
-
-        val dialogView = layoutInflater.inflate(R.layout.dialog_dispatch_checklist, null)
-        val tvOrderRef = dialogView.findViewById<TextView>(R.id.tvOrderRef)
-        val container = dialogView.findViewById<LinearLayout>(R.id.layoutSubordersContainer)
-        val tvProgress = dialogView.findViewById<TextView>(R.id.tvDispatchProgress)
-        val btnViewPdf = dialogView.findViewById<Button>(R.id.btnViewPdfDispatch)
-        val btnFinish = dialogView.findViewById<Button>(R.id.btnFinishDispatch)
-        val btnDismiss = dialogView.findViewById<Button>(R.id.btnDismissDispatch)
-
-        btnViewPdf?.setOnClickListener {
-            val fullOrder = orderDetail ?: OrderDetailResponse(
-                id = orderId,
-                supplierSuborders = suborders,
-                totalAmount = suborders.sumOf { it.subtotal }
-            )
-            val prefs = getSharedPreferences("session_prefs", Context.MODE_PRIVATE)
-            val restaurantName = prefs.getString("KEY_RESTAURANT_NAME", "F&B SMARTORDER RESTAURANT") ?: "F&B SMARTORDER RESTAURANT"
-            val chefName = prefs.getString("KEY_CHEF_NAME", "Chef de Turno") ?: "Chef de Turno"
-            try {
-                val pdfFile = com.fb.smartorder.util.PdfOrderGenerator.generateOrderPdf(this, fullOrder, restaurantName, chefName)
-                com.fb.smartorder.util.PdfOrderGenerator.openPdfViewer(this, pdfFile)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Error generando PDF: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        val refShort = orderId?.takeLast(6)?.uppercase() ?: "N/A"
-        val totalEur = suborders.sumOf { it.subtotal }
-        tvOrderRef.text = "Pedido #$refShort · Total: ${String.format("%.2f", totalEur)} €"
-
-        val dispatchedSet = mutableSetOf<String>()
-
-        // Solo los que hayan sido despachados automáticamente por SMTP en el backend
-        for (so in suborders) {
-            if (so.emailDispatched == true) {
-                dispatchedSet.add(so.supplierId ?: so.supplierName)
-            }
-        }
-
-        fun updateProgress() {
-            val total = suborders.size
-            val done = dispatchedSet.size
-            if (done >= total) {
-                tvProgress.text = "✅ ¡Todos los pedidos despachados! ($total de $total)"
-                tvProgress.setTextColor(ContextCompat.getColor(this, R.color.stamp_red))
-                btnFinish.text = "FINALIZAR Y LIMPIAR COMANDA ✅"
-            } else {
-                tvProgress.text = "$done de $total pedidos despachados (${total - done} pendientes de WhatsApp)"
-                tvProgress.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
-                btnFinish.text = "FINALIZAR COMANDA"
-            }
-        }
-
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setCancelable(false)
-            .create()
-
-        // Inflar cada subpedido en el contenedor
-        for (so in suborders) {
-            val itemView = layoutInflater.inflate(R.layout.item_dispatch_suborder, container, false)
-            val tvName = itemView.findViewById<TextView>(R.id.tvSuborderSupplierName)
-            val tvAmount = itemView.findViewById<TextView>(R.id.tvSuborderAmount)
-            val tvBadge = itemView.findViewById<TextView>(R.id.tvSuborderChannelBadge)
-            val tvSummary = itemView.findViewById<TextView>(R.id.tvSuborderItemsSummary)
-            val layoutSent = itemView.findViewById<LinearLayout>(R.id.layoutSuborderSent)
-            val tvSentText = itemView.findViewById<TextView>(R.id.tvSuborderSentText)
-            val btnSend = itemView.findViewById<Button>(R.id.btnSendWhatsAppSuborder)
-
-            val sKey = so.supplierId ?: so.supplierName
-            val isEmail = so.preferredChannel?.lowercase() == "email" || so.emailDispatched == true
-
-            tvName.text = so.supplierName
-            tvAmount.text = String.format("%.2f €", so.subtotal)
-
-            // Resumen de productos del subpedido
-            val itemsLines = so.whatsappText?.lines()
-                ?.filter { it.trim().startsWith("•") }
-                ?.joinToString("\n")
-            tvSummary.text = if (!itemsLines.isNullOrEmpty()) itemsLines else "Productos seleccionados de la comanda"
-
-            if (isEmail) {
-                tvBadge.text = "EMAIL ✉️"
-                tvBadge.setBackgroundResource(R.drawable.bg_badge_email)
-                tvBadge.setTextColor(ContextCompat.getColor(this, R.color.button_retro_bg))
-
-                if (so.emailDispatched == true) {
-                    layoutSent.visibility = View.VISIBLE
-                    tvSentText.text = "✅ ENVIADO AUTOMÁTICAMENTE (EMAIL)"
-                    if (!so.supplierPhone.isNullOrBlank()) {
-                        btnSend.visibility = View.VISIBLE
-                        btnSend.text = "📲 Enviar copia por WhatsApp"
-                        btnSend.setOnClickListener {
-                            promptSaveContactIfNeeded(so) {
-                                val sanitizedPhone = cleanSupplierPhone(so.supplierPhone)
-                                val waUrl = if (!sanitizedPhone.isNullOrBlank()) {
-                                    val waText = so.whatsappText ?: "Pedido F&B SmartOrder"
-                                    "https://api.whatsapp.com/send?phone=$sanitizedPhone&text=${Uri.encode(waText)}"
-                                } else {
-                                    so.whatsappUrl
-                                }
-                                if (!waUrl.isNullOrEmpty()) {
-                                    try {
-                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(waUrl)))
-                                    } catch (e: Exception) {
-                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_TEXT, so.whatsappText ?: "Pedido F&B SmartOrder")
-                                        }
-                                        startActivity(Intent.createChooser(shareIntent, "Compartir pedido con ${so.supplierName}"))
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        btnSend.visibility = View.GONE
-                    }
-                } else {
-                    btnSend.text = "✉️ Enviar Email"
-                    btnSend.visibility = View.VISIBLE
-                    layoutSent.visibility = View.GONE
-                    btnSend.setOnClickListener {
-                        promptSaveContactIfNeeded(so) {
-                            val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:${so.supplierEmail ?: ""}")
-                                putExtra(Intent.EXTRA_SUBJECT, "Pedido F&B SmartOrder - ${so.supplierName}")
-                                putExtra(Intent.EXTRA_TEXT, so.whatsappText ?: "Pedido de cocina")
-                            }
-                            try {
-                                startActivity(emailIntent)
-                            } catch (e: Exception) {
-                                Toast.makeText(this, "No se encontró aplicación de correo", Toast.LENGTH_SHORT).show()
-                            }
-                            dispatchedSet.add(sKey)
-                            btnSend.visibility = View.GONE
-                            layoutSent.visibility = View.VISIBLE
-                            tvSentText.text = "✅ ENVIADO POR EMAIL"
-                            updateProgress()
-                        }
-                    }
-                }
-            } else {
-                tvBadge.text = "WHATSAPP 📲"
-                tvBadge.setBackgroundResource(R.drawable.bg_badge_whatsapp)
-                tvBadge.setTextColor(ContextCompat.getColor(this, R.color.stamp_red))
-
-                if (dispatchedSet.contains(sKey)) {
-                    btnSend.visibility = View.GONE
-                    layoutSent.visibility = View.VISIBLE
-                    tvSentText.text = "✅ ENVIADO POR WHATSAPP"
-                } else {
-                    btnSend.visibility = View.VISIBLE
-                    layoutSent.visibility = View.GONE
-
-                    btnSend.setOnClickListener {
-                        promptSaveContactIfNeeded(so) {
-                            val sanitizedPhone = cleanSupplierPhone(so.supplierPhone)
-                            val waUrl = if (!sanitizedPhone.isNullOrBlank()) {
-                                val waText = so.whatsappText ?: "Pedido F&B SmartOrder"
-                                "https://api.whatsapp.com/send?phone=$sanitizedPhone&text=${Uri.encode(waText)}"
-                            } else {
-                                so.whatsappUrl
-                            }
-
-                            if (!waUrl.isNullOrEmpty()) {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(waUrl))
-                                try {
-                                    startActivity(intent)
-                                } catch (e: Exception) {
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, so.whatsappText ?: "Pedido F&B SmartOrder")
-                                    }
-                                    startActivity(Intent.createChooser(shareIntent, "Compartir pedido con ${so.supplierName}"))
-                                }
-                            } else {
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, so.whatsappText ?: "Pedido F&B SmartOrder")
-                                    `package` = "com.whatsapp"
-                                }
-                                try {
-                                    startActivity(intent)
-                                } catch (e: Exception) {
-                                    startActivity(Intent.createChooser(intent, "Compartir pedido con ${so.supplierName}"))
-                                }
-                            }
-                            dispatchedSet.add(sKey)
-                            btnSend.visibility = View.GONE
-                            layoutSent.visibility = View.VISIBLE
-                            tvSentText.text = "✅ ENVIADO POR WHATSAPP"
-                            updateProgress()
-                        }
-                    }
-                }
-            }
-
-            container.addView(itemView)
-        }
-
-        updateProgress()
-
-        btnFinish.setOnClickListener {
-            val total = suborders.size
-            val done = dispatchedSet.size
-            if (done < total) {
-                AlertDialog.Builder(this)
-                    .setTitle("Pedidos pendientes ⚠️")
-                    .setMessage("Aún te quedan ${total - done} pedidos de WhatsApp sin enviar. ¿Deseas limpiar la comanda de todas formas?")
-                    .setPositiveButton("Sí, finalizar") { _, _ ->
-                        clearComandaAndRefresh()
-                        dialog.dismiss()
-                    }
-                    .setNegativeButton("Continuar enviando", null)
-                    .show()
-            } else {
-                clearComandaAndRefresh()
-                dialog.dismiss()
-                Toast.makeText(this, "¡Comanda finalizada y pedidos despachados! 🎉", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        btnDismiss.setOnClickListener {
-            dialog.dismiss()
-        }
-
-        dialog.show()
-    }
-
-    private fun isSupplierInPhoneContacts(phone: String?, email: String?): Boolean {
-        if (phone.isNullOrBlank() && email.isNullOrBlank()) return true
-
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            try {
-                if (!phone.isNullOrBlank()) {
-                    val cleanDigits = phone.filter { it.isDigit() || it == '+' }
-                    if (cleanDigits.length >= 6) {
-                        val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(cleanDigits))
-                        contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup._ID), null, null, null)?.use { cursor ->
-                            if (cursor.moveToFirst()) return true
-                        }
-                    }
-                }
-                if (!email.isNullOrBlank()) {
-                    val uri = Uri.withAppendedPath(ContactsContract.CommonDataKinds.Email.CONTENT_LOOKUP_URI, Uri.encode(email))
-                    contentResolver.query(uri, arrayOf(ContactsContract.CommonDataKinds.Email._ID), null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) return true
-                    }
-                }
-            } catch (e: Exception) {
-                // Fallthrough
-            }
-        }
-
-        val sp = getSharedPreferences("phone_contacts_cache", MODE_PRIVATE)
-        val cacheKey = "contact_" + (phone ?: email ?: "")
-        return sp.getBoolean(cacheKey, false)
-    }
-
-    private fun cleanSupplierPhone(phone: String?): String? {
-        if (phone.isNullOrBlank()) return null
-        val parts = phone.split(Regex("[/,;\\n|y\\-]"))
-        val cands = mutableListOf<String>()
-        for (p in parts) {
-            var digits = p.filter { it.isDigit() }
-            if (digits.startsWith("0034")) digits = digits.substring(4)
-            else if (digits.startsWith("34") && digits.length == 11) digits = digits.substring(2)
-            if (digits.length == 9 || (digits.length in 10..15)) {
-                cands.add(digits)
-            }
-        }
-        if (cands.isEmpty()) {
-            val allDigits = phone.filter { it.isDigit() }
-            if (allDigits.length in 9..15) cands.add(allDigits)
-        }
-        if (cands.isEmpty()) return null
-        val mobile = cands.firstOrNull { it.startsWith("6") || it.startsWith("7") } ?: cands.first()
-        return if (mobile.length == 9) "34$mobile" else mobile
-    }
-
-    private fun markSupplierContactHandled(phone: String?, email: String?) {
-        val sp = getSharedPreferences("phone_contacts_cache", MODE_PRIVATE)
-        val cacheKey = "contact_" + (phone ?: email ?: "")
-        if (cacheKey.isNotEmpty()) {
-            sp.edit().putBoolean(cacheKey, true).apply()
-        }
-    }
-
-    private fun promptSaveContactIfNeeded(so: SupplierSubOrderResponse, onProceed: () -> Unit) {
-        val phone = so.supplierPhone
-        val email = so.supplierEmail
-
-        if (isSupplierInPhoneContacts(phone, email)) {
-            onProceed()
-            return
-        }
-
-        val contactDetails = when {
-            !phone.isNullOrBlank() && !email.isNullOrBlank() -> "Tel: $phone · Email: $email"
-            !phone.isNullOrBlank() -> "Tel: $phone"
-            !email.isNullOrBlank() -> "Email: $email"
-            else -> ""
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Añadir a Contactos 📱")
-            .setMessage("El proveedor '${so.supplierName}' ($contactDetails) aún no está guardado en la agenda de tu teléfono.\n\n¿Deseas añadirlo a tus contactos?")
-            .setPositiveButton("Guardar en Agenda") { _, _ ->
-                markSupplierContactHandled(phone, email)
-                val insertIntent = Intent(Intent.ACTION_INSERT).apply {
-                    type = ContactsContract.RawContacts.CONTENT_TYPE
-                    putExtra(ContactsContract.Intents.Insert.NAME, so.supplierName)
-                    if (!phone.isNullOrBlank()) {
-                        putExtra(ContactsContract.Intents.Insert.PHONE, phone)
-                    }
-                    if (!email.isNullOrBlank()) {
-                        putExtra(ContactsContract.Intents.Insert.EMAIL, email)
-                    }
-                }
-                try {
-                    startActivity(insertIntent)
-                } catch (e: Exception) {
-                    Toast.makeText(this, "No se pudo abrir la agenda de contactos", Toast.LENGTH_SHORT).show()
-                }
-                onProceed()
-            }
-            .setNegativeButton("Solo Enviar Pedido") { _, _ ->
-                markSupplierContactHandled(phone, email)
-                onProceed()
-            }
-            .setCancelable(true)
-            .show()
     }
 
     private fun clearComandaAndRefresh() {
@@ -797,7 +408,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun processFridgePhotoFile(file: File) {
         val progressDialog = AlertDialog.Builder(this)
-            .setTitle("Digitalizando lista de cocina 📷")
+            .setTitle("Digitalizando lista de cocina")
             .setMessage("Analizando notas manuscritas con IA (Gemini) y asignando mejores ofertas de proveedores...")
             .setCancelable(false)
             .create()
@@ -870,7 +481,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 AlertDialog.Builder(this)
-                    .setTitle("Digitalización completada 📋")
+                    .setTitle("Digitalización completada")
                     .setMessage(summaryMsg.toString())
                     .setPositiveButton("Ver Comanda", null)
                     .show()
@@ -929,7 +540,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.hsvSupplierFilter.visibility = View.VISIBLE
 
-        val allItems = mutableListOf<Pair<String?, String>>(Pair(null, "📦 Todos"))
+        val allItems = mutableListOf<Pair<String?, String>>(Pair(null, "TODOS"))
         suppliers.forEach { allItems.add(Pair(it.first, it.second)) }
 
         for (item in allItems) {
@@ -970,7 +581,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateChipStyle(tv: TextView, isSelected: Boolean) {
         if (isSelected) {
             tv.setBackgroundResource(R.drawable.bg_btn_retro)
-            tv.setTextColor(getColor(R.color.white))
+            tv.setTextColor(getColor(R.color.bg_paper))
         } else {
             tv.setBackgroundResource(R.drawable.bg_btn_secondary_retro)
             tv.setTextColor(getColor(R.color.text_primary))
@@ -993,97 +604,22 @@ class MainActivity : AppCompatActivity() {
         catalogAdapter.setFilterMode(mode)
         val activeBg = ContextCompat.getDrawable(this, R.drawable.bg_btn_retro)
         val inactiveBg = null
-        val whiteColor = ContextCompat.getColor(this, R.color.white)
+        val paperColor = ContextCompat.getColor(this, R.color.bg_paper)
         val mutedColor = ContextCompat.getColor(this, R.color.text_secondary)
 
         binding.tabFilterFavorites.background = if (mode == "favorites") activeBg else inactiveBg
-        binding.tabFilterFavorites.setTextColor(if (mode == "favorites") whiteColor else mutedColor)
+        binding.tabFilterFavorites.setTextColor(if (mode == "favorites") paperColor else mutedColor)
 
         binding.tabFilterAll.background = if (mode == "all") activeBg else inactiveBg
-        binding.tabFilterAll.setTextColor(if (mode == "all") whiteColor else mutedColor)
+        binding.tabFilterAll.setTextColor(if (mode == "all") paperColor else mutedColor)
 
         binding.tabFilterHidden.background = if (mode == "hidden") activeBg else inactiveBg
-        binding.tabFilterHidden.setTextColor(if (mode == "hidden") whiteColor else mutedColor)
+        binding.tabFilterHidden.setTextColor(if (mode == "hidden") paperColor else mutedColor)
     }
 
     private fun showEditProductDialog(product: Product) {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_edit_product, null)
-        val tvOriginal = dialogView.findViewById<TextView>(R.id.tvOriginalInfo)
-        val etName = dialogView.findViewById<EditText>(R.id.etEditProductName)
-        val etPrice = dialogView.findViewById<EditText>(R.id.etEditProductPrice)
-        val spinnerUnit = dialogView.findViewById<Spinner>(R.id.spinnerEditProductUnit)
-        val cbHidden = dialogView.findViewById<CheckBox>(R.id.cbEditIsHidden)
-        val btnReset = dialogView.findViewById<Button>(R.id.btnEditReset)
-        val btnCancel = dialogView.findViewById<Button>(R.id.btnEditCancel)
-        val btnSave = dialogView.findViewById<Button>(R.id.btnEditSave)
-
-        val units = listOf("kg", "ud", "bolsa", "caja", "estuche", "bandeja", "tarrina", "lote")
-        val unitAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, units)
-        spinnerUnit.adapter = unitAdapter
-
-        val origName = product.originalName ?: product.name
-        val origPrice = product.bestPrice?.let { String.format("%.2f", it) } ?: "0.00"
-        val origCode = product.supplierProductCode ?: product.id
-        tvOriginal.text = "Original: $origCode · $origName ($origPrice €/${product.standardUnit})"
-
-        etName.setText(product.customName ?: product.name)
-        etPrice.setText(if (product.bestPrice != null) String.format(java.util.Locale.US, "%.2f", product.bestPrice) else "")
-        val currentUnitIdx = units.indexOf(product.standardUnit).let { if (it >= 0) it else 0 }
-        spinnerUnit.setSelection(currentUnitIdx)
-        cbHidden.isChecked = product.isHidden
-
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .create()
-
-        btnReset.setOnClickListener {
-            viewModel.updateProductOverride(
-                product.id,
-                com.fb.smartorder.model.ProductOverrideRequest(
-                    customName = null,
-                    customPrice = null,
-                    customUnit = null,
-                    isHidden = false
-                )
-            ) { success ->
-                if (success) {
-                    Toast.makeText(this, "Valores originales restablecidos", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
-                }
-            }
+        ProductDialogs.showEditProductDialog(this, product, viewModel) {
+            catalogAdapter.notifyDataSetChanged()
         }
-
-        btnCancel.setOnClickListener { dialog.dismiss() }
-
-        btnSave.setOnClickListener {
-            val newName = etName.text.toString().trim()
-            val newPriceStr = etPrice.text.toString().trim().replace(',', '.')
-            val newPrice = newPriceStr.toDoubleOrNull()
-            val selectedUnit = spinnerUnit.selectedItem.toString()
-            val isHidden = cbHidden.isChecked
-
-            val req = com.fb.smartorder.model.ProductOverrideRequest(
-                customName = if (newName.isNotBlank()) newName else null,
-                customPrice = newPrice,
-                customUnit = selectedUnit,
-                isHidden = isHidden
-            )
-
-            viewModel.updateProductOverride(product.id, req) { success ->
-                if (success) {
-                    product.name = newName.ifBlank { origName }
-                    if (newPrice != null) product.bestPrice = newPrice
-                    product.standardUnit = selectedUnit
-                    product.isHidden = isHidden
-                    catalogAdapter.notifyDataSetChanged()
-                    Toast.makeText(this, "Producto personalizado guardado", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
-                } else {
-                    Toast.makeText(this, "Error guardando cambios", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        dialog.show()
     }
 }

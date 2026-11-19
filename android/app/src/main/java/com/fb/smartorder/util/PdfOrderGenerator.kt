@@ -2,11 +2,14 @@ package com.fb.smartorder.util
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
 import androidx.core.content.FileProvider
 import com.fb.smartorder.model.OrderDetailResponse
 import java.io.File
@@ -302,5 +305,34 @@ object PdfOrderGenerator {
         val chooser = Intent.createChooser(intent, "Abrir Albarán con...")
         chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(chooser)
+    }
+
+    /**
+     * Renderiza la primera página del PDF en un Bitmap para vista previa en miniatura (API 21+).
+     */
+    fun renderPdfFirstPage(pdfFile: File, scale: Float = 1.5f): Bitmap? {
+        return try {
+            val pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            val renderer = PdfRenderer(pfd)
+            if (renderer.pageCount > 0) {
+                val page = renderer.openPage(0)
+                val targetW = (page.width * scale).toInt()
+                val targetH = (page.height * scale).toInt()
+                val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+                renderer.close()
+                pfd.close()
+                bitmap
+            } else {
+                renderer.close()
+                pfd.close()
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 }
