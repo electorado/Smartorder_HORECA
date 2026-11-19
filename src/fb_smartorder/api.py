@@ -651,14 +651,13 @@ def get_products(
             c_price = ov.get("custom_price") if ov.get("custom_price") is not None else p.get("custom_price")
             c_unit = ov.get("custom_unit") or p.get("custom_unit")
 
-            # Filtrado por tipo (favorites, all, hidden)
+            # Filtrado opcional por tipo en servidor (si el cliente lo especifica expresamente)
             f_type = (filter_type or "").lower().strip()
             if f_type == "favorites" and (not is_fav or is_hid):
                 continue
             elif f_type == "hidden" and not is_hid:
                 continue
-            elif f_type not in ["favorites", "hidden"] and is_hid:
-                # En la vista normal 'all' o sin filtro, no mostrar los ocultos
+            elif f_type in ["visible", "active"] and is_hid:
                 continue
 
             cat = p.get("category") or (master.get("category") if master else None) or "General"
