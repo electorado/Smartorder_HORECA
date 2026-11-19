@@ -198,6 +198,8 @@ Conforme al criterio técnico **R01F03T01P01**, este enfoque fue **oficialmente 
 #### Opción A: Instalación directa del APK
 El repositorio incluye el instalador debug compilado listo para usar en tu móvil o emulador:
 * Descarga o transfiere el archivo [FB_SmartOrder_v1.0.apk](./FB_SmartOrder_v1.0.apk) a tu dispositivo e instálalo permitiendo orígenes desconocidos.
+* **Conectividad Cloud Demo:** Por defecto, el APK apunta al entorno en la nube desplegado en Render (`https://smartorder-api-z4or.onrender.com/`) conectado a MongoDB Atlas, permitiendo la evaluación inmediata sin requerir infraestructura local.
+* **Conectividad Local de Cocina:** Desde la pantalla de inicio de sesión o ajustes de perfil, el cocinero puede conmutar la URL del servidor a `http://10.0.2.2:8000/` (emulador) o a la IP de red local del restaurante (Docker) para operar a latencia ultra-baja.
 
 #### Opción B: Compilación desde código fuente
 ```bash
