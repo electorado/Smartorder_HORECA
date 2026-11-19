@@ -10,24 +10,25 @@ def load_raw_products(
     is_annex: bool = False,
     user_email: Optional[str] = None
 ) -> int:
-    """Carga o actualiza los productos procesados en la colección de MongoDB asociados a un cocinero/usuario.
-    Si is_annex es False (modo sustitución por defecto), purga los productos anteriores
-    del proveedor para este usuario para que no queden ítems descatalogados o que ya no se pueden pedir.
-    Si is_annex es True (modo anexo), mantiene el catálogo base y solo añade/actualiza."""
+    """Carga o actualiza los productos en MongoDB asociados a un usuario.
+    
+    Si is_annex es False (reemplazo), elimina los productos previos del proveedor
+    para evitar mantener referencias obsoletas. Si es True (anexo), añade o actualiza.
+    """
     if not products:
-        print("⚠️ No hay productos para cargar.")
+        print("[LOAD] No hay productos para cargar.")
         return 0
 
     u_email = (user_email or "pablo@horeca.com").lower().strip()
     db = get_database()
     collection = db["productos_brutos"]
 
-    # En modo sustitución, purgar productos antiguos del proveedor para este usuario
+    # Modo reemplazo: limpiar catálogo anterior del proveedor para este usuario
     if not is_annex:
         deleted = collection.delete_many({"supplier_id": provider_id, "user_email": u_email})
-        print(f"🗑️ Reemplazo de catálogo: eliminados {deleted.deleted_count} productos anteriores del proveedor {provider_id} para {u_email}.")
+        print(f"[LOAD] Catálogo sustituido: {deleted.deleted_count} productos anteriores eliminados ({provider_id}).")
 
-    # Obtener nombre del proveedor si no se indicó
+    # Obtener nombre del proveedor si no viene indicado
     if not supplier_name:
         supp = db["proveedores"].find_one({"id": provider_id, "user_email": u_email}) or db["proveedores"].find_one({"id": provider_id})
         supplier_name = supp.get("name", provider_id) if supp else provider_id
@@ -40,7 +41,7 @@ def load_raw_products(
         clean_name = prod.get("clean_name", "")
         master_id = prod.get("master_ingredient_id")
 
-        # Auto-crear ingrediente maestro si no existía previa coincidencia
+        # Crear ingrediente maestro automático si no existe coincidencia previa
         if not master_id and raw_name and len(raw_name) >= 2:
             import re
             clean_slug = re.sub(r'[^a-z0-9]', '_', clean_name).strip('_')
@@ -53,7 +54,7 @@ def load_raw_products(
                         "name": raw_name.title(),
                         "category": "Catálogo Proveedores",
                         "standard_unit": prod.get("canonical_unit") or prod.get("unit", "ud"),
-                        "description": f"Ingrediente registrado dinámicamente desde el catálogo de {supplier_name}"
+                        "description": f"Ingrediente registrado desde el catálogo de {supplier_name}"
                     }
                 },
                 upsert=True
@@ -78,7 +79,6 @@ def load_raw_products(
             "updated_at": now
         }
 
-        # Reemplazar o insertar si coincide usuario, proveedor y código/nombre
         filter_query = {
             "user_email": u_email,
             "supplier_id": provider_id,
@@ -88,13 +88,13 @@ def load_raw_products(
         collection.update_one(filter_query, {"$set": doc}, upsert=True)
         count += 1
 
-    print(f"💾 Guardados/actualizados {count} productos para el proveedor {provider_id} ({supplier_name}) en MongoDB.")
+    print(f"[LOAD] Guardados {count} productos de {provider_id} ({supplier_name}).")
     return count
 
 
 
 def save_catalog_file(filename: str, file_bytes: bytes, supplier_id: str) -> str:
-    """Guarda el archivo original (PDF/XLSX) en GridFS para auditoría visual."""
+    """Guarda una copia del fichero original (PDF o Excel) en GridFS."""
     fs = get_gridfs()
     file_id = fs.put(
         file_bytes,
@@ -102,5 +102,5 @@ def save_catalog_file(filename: str, file_bytes: bytes, supplier_id: str) -> str
         supplier_id=supplier_id,
         upload_date=datetime.utcnow()
     )
-    print(f"📂 Archivo original '{filename}' respaldado en GridFS con ID: {file_id}")
+    print(f"[GRIDFS] Archivo '{filename}' guardado con ID {file_id}")
     return str(file_id)

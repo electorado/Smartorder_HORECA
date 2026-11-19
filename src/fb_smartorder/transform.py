@@ -10,9 +10,9 @@ STOPWORDS_ES = {
     "kg", "ud", "uds", "gr", "kilos", "kilo", "pieza", "piezas", "extra", "super", "brik"
 }
 
-# Mapa ontológico / taxonómico de familias de alimentos (Hostelería)
+# Diccionario de equivalencias para unificar términos de hostelería
 TAXONOMY_MAP = {
-    # Vacuno (bovino)
+    # Vacuno
     "vaca": "vacuno",
     "ternera": "vacuno",
     "buey": "vacuno",
@@ -30,14 +30,14 @@ TAXONOMY_MAP = {
     "gallina": "ave",
     # Cortes
     "chuleton": "chuleta",
-    # Pescados / Cefalópodos
+    # Pescados y cefalópodos
     "chopo": "sepia",
     "pota": "calamar",
     # Aceites
     "aove": "oliva"
 }
 
-# Cortes y formatos de carne / pescado reconocidos para evitar mezclar partes incompatibles
+# Cortes habituales para evitar asociar piezas incompatibles
 KNOWN_CUTS = {
     "solomillo", "chuletero", "chuleton", "chuleta", "chuletas", "lomo",
     "entrecot", "falda", "aguja", "carrillada", "churrasco",
@@ -48,7 +48,7 @@ KNOWN_CUTS = {
 
 
 def clean_tokens(text: str) -> list[str]:
-    """Extrae tokens normalizados semántica y fonéticamente."""
+    """Extrae palabras clave limpias eliminando tildes, precios y palabras vacías."""
     text_norm = unicodedata.normalize("NFKD", text)
     text_clean = "".join(c for c in text_norm if unicodedata.category(c) != "Mn").lower()
     text_clean = re.sub(r'\(?c[.:]?\s*\d+\)?', '', text_clean)
@@ -65,7 +65,7 @@ def clean_tokens(text: str) -> list[str]:
 
 
 def parse_product_structure(text: str):
-    """Separa el producto principal (head) de notas accesorias ('con...', 'c/...', notas entre paréntesis)."""
+    """Separa el nombre base del producto de añadidos y acompañamientos."""
     clean_txt = re.sub(r'\(.*?\)', '', text)
     parts = re.split(r'\b(?:con|c/)\b', clean_txt, flags=re.IGNORECASE)
     head_txt = parts[0].strip()
@@ -84,7 +84,7 @@ def parse_product_structure(text: str):
 
 
 def clean_product_text(text: str) -> str:
-    """Limpia ruido del texto (acentos, mayúsculas, códigos, precios y palabras promocionales)."""
+    """Limpia signos de puntuación, precios y textos promocionales."""
     if not text:
         return ""
     
@@ -329,12 +329,12 @@ def resolve_entities(
         results.append(prod)
 
     matched_count = sum(1 for r in results if r["master_ingredient_id"] is not None)
-    print(f"✅ Entity Resolution finalizado: {matched_count}/{len(raw_products)} emparejados.")
+    print(f"[TRANSFORM] Productos vinculados con maestro: {matched_count}/{len(raw_products)}")
     return results
 
 
-class OntologicalEntityResolver:
-    """Motor de resolución de entidades basado en taxonomía ontológica y similitud híbrida."""
+class EntityResolver:
+    """Clase helper para agrupar métodos de normalización y vinculación de ingredientes."""
 
     TAXONOMY_MAP = TAXONOMY_MAP
     KNOWN_CUTS = KNOWN_CUTS
@@ -342,22 +342,18 @@ class OntologicalEntityResolver:
 
     @staticmethod
     def clean_product_text(text: str) -> str:
-        """Normaliza y limpia caracteres especiales y puntuación de nombres de producto."""
         return clean_product_text(text)
 
     @staticmethod
     def clean_tokens(text: str) -> List[str]:
-        """Obtiene tokens léxicos limpios eliminando stopwords y palabras vacías."""
         return clean_tokens(text)
 
     @staticmethod
     def parse_product_structure(text: str) -> Dict[str, Any]:
-        """Descompone el producto en corte principal/raíz y accesorios secundarios."""
         return parse_product_structure(text)
 
     @staticmethod
     def normalize_metric_dimension(price: float, unit: str, format_str: str = "") -> Dict[str, Any]:
-        """Normaliza formatos y calcula el precio por unidad canónica (kg, L, ud)."""
         return normalize_metric_dimension(price, unit, format_str)
 
     @staticmethod
@@ -366,5 +362,8 @@ class OntologicalEntityResolver:
         master_catalog: List[Dict[str, Any]], 
         threshold: float = 65.0
     ) -> List[Dict[str, Any]]:
-        """Mapea productos brutos heterogéneos con el catálogo maestro de ingredientes."""
         return resolve_entities(raw_products, master_catalog, threshold=threshold)
+
+
+# Alias de compatibilidad
+OntologicalEntityResolver = EntityResolver
