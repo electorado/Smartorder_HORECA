@@ -132,10 +132,10 @@ def send_order_email_smtp(
     msg["To"] = supplier_email or "pedidos@proveedor.com"
     msg.set_content(email_body)
 
-    # Lista de puertos a intentar: 587 (STARTTLS), 2525 (STARTTLS alt), 465 (SSL)
+    # Lista de puertos a intentar: 2525 (STARTTLS alt abierto en Render/cloud), 587 (STARTTLS estandar), 465 (SSL)
     port_candidates = [
-        (int(os.getenv("SMTP_PORT", 587)), "tls"),
         (2525, "tls"),
+        (int(os.getenv("SMTP_PORT", 587)), "tls"),
         (465, "ssl"),
     ]
     seen_ports = set()
@@ -203,8 +203,8 @@ def send_password_recovery_email_brevo(
     msg.set_content(body)
 
     port_candidates = [
-        (int(os.getenv("SMTP_PORT", 587)), "tls"),
         (2525, "tls"),
+        (int(os.getenv("SMTP_PORT", 587)), "tls"),
         (465, "ssl"),
     ]
     seen_ports = set()
