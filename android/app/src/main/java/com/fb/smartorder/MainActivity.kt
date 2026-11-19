@@ -600,6 +600,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupCatalogFilterTabs() {
+        catalogAdapter.onFilterResult = { count ->
+            if (count == 0 && !catalogAdapter.showOnlySelected) {
+                binding.tvEmptyMessage.visibility = View.VISIBLE
+                binding.tvEmptyMessage.text = when (catalogAdapter.getFilterMode()) {
+                    "hidden" -> "No tienes productos ocultos en el catálogo."
+                    "favorites" -> "No hay productos habituales seleccionados."
+                    else -> getString(R.string.empty_catalog)
+                }
+            } else if (!catalogAdapter.showOnlySelected) {
+                binding.tvEmptyMessage.visibility = View.GONE
+            }
+        }
+
         binding.tabFilterFavorites.setOnClickListener {
             selectCatalogFilterTab("favorites")
         }
@@ -630,7 +643,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showEditProductDialog(product: Product) {
         ProductDialogs.showEditProductDialog(this, product, viewModel) {
-            catalogAdapter.notifyDataSetChanged()
+            catalogAdapter.applyFilters()
         }
     }
 }

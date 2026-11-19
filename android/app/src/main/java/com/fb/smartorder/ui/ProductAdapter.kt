@@ -21,6 +21,9 @@ class ProductAdapter(
     private var filterMode: String = "favorites" // "favorites", "all", "hidden"
     private var currentQuery: String = ""
     private var selectedSupplierId: String? = null
+    var onFilterResult: ((Int) -> Unit)? = null
+
+    fun getFilterMode(): String = filterMode
 
     fun setProducts(products: List<Product>) {
         fullList.clear()
@@ -62,7 +65,7 @@ class ProductAdapter(
             .trim()
     }
 
-    private fun applyFilters() {
+    fun applyFilters() {
         val cleanQuery = normalize(currentQuery)
         val queryWords = cleanQuery.split("\\s+".toRegex()).filter { it.isNotEmpty() }
 
@@ -110,6 +113,7 @@ class ProductAdapter(
             }
         )
         notifyDataSetChanged()
+        onFilterResult?.invoke(displayedList.size)
     }
 
     fun getSelectedQuantities(): Map<Product, Int> {
