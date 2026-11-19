@@ -93,6 +93,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.loadProducts()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -103,6 +108,7 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra("EXTRA_START_SCAN", false)) {
             checkAndLaunchCamera()
         }
+        viewModel.loadProducts()
     }
 
     private fun setupRecyclerViews() {
@@ -152,6 +158,7 @@ class MainActivity : AppCompatActivity() {
         // Tab 2: Catálogo de productos
         binding.navItemCatalog.setOnClickListener {
             switchTab(1)
+            viewModel.loadProducts()
         }
 
         // Tab 3: Botón central Cámara (1 toque = Cámara directa, Long Click = Galería)
@@ -533,6 +540,10 @@ class MainActivity : AppCompatActivity() {
     private var activeFilterSupplierId: String? = null
 
     private fun setupSupplierFilterChips(suppliers: List<Pair<String, String>>) {
+        if (activeFilterSupplierId != null && suppliers.none { it.first == activeFilterSupplierId }) {
+            activeFilterSupplierId = null
+            catalogAdapter.filterBySupplier(null)
+        }
         binding.layoutSupplierChips.removeAllViews()
         if (suppliers.isEmpty()) {
             binding.hsvSupplierFilter.visibility = View.GONE
