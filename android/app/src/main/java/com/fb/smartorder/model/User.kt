@@ -56,3 +56,11 @@ data class UserUpdateRequest(
     @SerializedName("password")
     val password: String? = null
 )
+
+data class ForgotPasswordRequest(
+    @SerializedName("email")
+    val email: String,
+
+    @SerializedName("new_password")
+    val newPassword: String? = null
+)

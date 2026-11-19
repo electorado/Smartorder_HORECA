@@ -17,32 +17,32 @@
         <!-- Sello de Encabezado -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="44dp"
             android:layout_marginTop="28dp"
             android:background="@drawable/bg_stamp_header"
             android:gravity="center"
-            android:orientation="vertical"
-            android:paddingTop="18dp"
-            android:paddingBottom="18dp">
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-condensed"
-                android:letterSpacing="0.08"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:fontFamily="@font/retro_condensed_italic"
+                app:fontFamily="@font/retro_condensed_italic"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.04"
                 android:text="F&amp;B SMARTORDER"
-                android:textColor="@color/white"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-condensed"
-                android:letterSpacing="0.05"
-                android:text="PORTAL DE ACCESO A COCINA"
-                android:textColor="#F0D0D0"
-                android:textSize="11sp" />
+                android:textColor="@color/bg_paper"
+                android:textSize="40sp"
+                android:autoSizeTextType="uniform"
+                app:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="24sp"
+                app:autoSizeMinTextSize="24sp"
+                android:autoSizeMaxTextSize="44sp"
+                app:autoSizeMaxTextSize="44sp"
+                android:autoSizeStepGranularity="1sp"
+                app:autoSizeStepGranularity="1sp" />
         </LinearLayout>
 
         <!-- Tarjeta de Login -->
@@ -90,7 +90,7 @@
                 android:layout_marginTop="4dp"
                 android:background="@drawable/bg_search_input"
                 android:fontFamily="sans-serif-condensed"
-                android:hint="pablo@horeca.com"
+                android:hint="cuisto@horeca.com"
                 android:inputType="textEmailAddress"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
@@ -128,9 +128,24 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:fontFamily="sans-serif-condensed"
-                android:text="💡 Demo rápida: pablo@horeca.com / password123"
+                android:text="Demo rápida: cuisto@horeca.com / password123"
                 android:textColor="@color/text_secondary"
                 android:textSize="11sp" />
+
+            <!-- ¿Has olvidado la contraseña? -->
+            <TextView
+                android:id="@+id/btnForgotPassword"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:layout_marginTop="6dp"
+                android:background="?attr/selectableItemBackground"
+                android:fontFamily="sans-serif-condensed"
+                android:padding="4dp"
+                android:text="¿Has olvidado la contraseña?"
+                android:textColor="@color/stamp_red_dark"
+                android:textSize="12sp"
+                android:textStyle="bold" />
 
             <!-- Barra de Progreso -->
             <ProgressBar
@@ -149,8 +164,8 @@
                 android:layout_marginTop="12dp"
                 android:backgroundTint="@color/stamp_red"
                 android:fontFamily="sans-serif-condensed"
-                android:text="ENTRAR A COCINA 👨‍🍳"
-                android:textColor="@color/white"
+                android:text="ENTRAR A COCINA"
+                android:textColor="@color/bg_paper"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -167,15 +182,6 @@
                 android:textSize="13sp" />
 
         </LinearLayout>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:fontFamily="sans-serif-condensed"
-            android:text="F&amp;B SmartOrder · Proyecto Fin de Grado DAM"
-            android:textColor="@color/text_muted"
-            android:textSize="11sp" />
 
     </LinearLayout>
 </ScrollView>

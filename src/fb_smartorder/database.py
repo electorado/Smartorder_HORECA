@@ -8,11 +8,11 @@ import gridfs
 load_dotenv(override=True)
 
 def hash_password(password: str) -> str:
-    """Calcula el hash SHA-256 de una contraseña."""
+    """Genera el hash SHA-256 de una contraseña."""
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 def get_db_client():
-    """Inicializa y devuelve el cliente utilizando MONGO_URI (Atlas) o variables locales (Docker)."""
+    """Crea la conexión con MongoDB usando Atlas (MONGO_URI) o credenciales locales."""
     mongo_uri = os.getenv("MONGO_URI")
     if mongo_uri:
         return MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
@@ -26,7 +26,7 @@ def get_db_client():
     return MongoClient(connection_string, serverSelectionTimeoutMS=5000)
 
 def get_database(db_name="fb_smartorder"):
-    """Devuelve la instancia de la base de datos específica del proyecto."""
+    """Obtiene la base de datos principal."""
     client = get_db_client()
     try:
         default_db = client.get_default_database()
@@ -37,23 +37,23 @@ def get_database(db_name="fb_smartorder"):
     return client[db_name]
 
 def get_gridfs(db_name="fb_smartorder"):
-    """Devuelve la instancia de GridFS para almacenar archivos binarios (PDFs, Excel nativos)."""
+    """Acceso a GridFS para guardar ficheros (PDFs y Excel)."""
     db = get_database(db_name)
     return gridfs.GridFS(db)
 
 def init_db(db_name="fb_smartorder"):
-    """Inicializa colecciones e índices esenciales en MongoDB y siembra datos iniciales de prueba."""
+    """Crea índices y carga datos iniciales si la base de datos está vacía."""
     try:
         db = get_database(db_name)
         
-        # Índices
+        # Índices principales
         db["productos_brutos"].create_index([("clean_name", "text")])
         db["productos_brutos"].create_index([("supplier_id", 1)])
         db["productos_brutos"].create_index([("master_ingredient_id", 1)])
         db["ingredientes_maestros"].create_index([("name", 1)], unique=True)
         db["proveedores"].create_index([("user_email", 1), ("id", 1)], unique=True)
 
-        # Semilla de proveedores si la colección está vacía o incompleta
+        # Proveedores por defecto si no hay datos
         suppliers_count = db["proveedores"].count_documents({})
         if suppliers_count < 4:
             suppliers = [
@@ -101,7 +101,7 @@ def init_db(db_name="fb_smartorder"):
             for s in suppliers:
                 db["proveedores"].update_one({"id": s["id"]}, {"$set": s}, upsert=True)
 
-        # Semilla de ingredientes maestros si está vacía o incompleta
+        # Ingredientes maestros iniciales
         master_seeds = [
             {"id": "ing_tomate_rama", "name": "Tomate Rama", "category": "Frutas y Verduras", "standard_unit": "kg", "description": "Tomate de rama para ensaladas y guisos"},
             {"id": "ing_cebolla_recogida", "name": "Cebolla Recogida", "category": "Frutas y Verduras", "standard_unit": "kg", "description": "Cebolla común o grano"},
@@ -123,19 +123,45 @@ def init_db(db_name="fb_smartorder"):
         for ing in master_seeds:
             db["ingredientes_maestros"].update_one({"id": ing["id"]}, {"$set": ing}, upsert=True)
 
-        # Semilla e índices de usuarios y multi-tenancy por cocinero
+        # Índices y usuarios por defecto
         db["usuarios"].create_index([("email", 1)], unique=True)
         db["productos_brutos"].create_index([("user_email", 1)])
         db["proveedores"].create_index([("user_email", 1)])
         db["pedidos"].create_index([("user_email", 1)])
-        if db["usuarios"].count_documents({"email": "pablo@horeca.com"}) == 0:
-            db["usuarios"].insert_one({
-                "name": "Pablo Moncayo",
-                "email": "pablo@horeca.com",
-                "password_hash": hash_password("password123"),
-                "restaurant_name": "Restaurante El Faro",
-                "created_at": datetime.utcnow()
-            })
+        for default_user in [
+            {"email": "cuisto@horeca.com", "name": "Chef Cuisto", "restaurant_name": "Restaurante El Faro"},
+            {"email": "pablo@horeca.com", "name": "Pablo Moncayo", "restaurant_name": "Restaurante El Faro"}
+        ]:
+            if db["usuarios"].count_documents({"email": default_user["email"]}) == 0:
+                db["usuarios"].insert_one({
+                    "name": default_user["name"],
+                    "email": default_user["email"],
+                    "password_hash": hash_password("password123"),
+                    "restaurant_name": default_user["restaurant_name"],
+                    "created_at": datetime.utcnow()
+                })
+
+        # Sincronizar catálogo y proveedores demo para cuisto@horeca.com
+        if db["proveedores"].count_documents({"user_email": "cuisto@horeca.com"}) == 0:
+            for p in db["proveedores"].find({"user_email": "pablo@horeca.com"}):
+                p_copy = dict(p)
+                p_copy.pop("_id", None)
+                p_copy["user_email"] = "cuisto@horeca.com"
+                db["proveedores"].insert_one(p_copy)
+
+        if db["productos_brutos"].count_documents({"user_email": "cuisto@horeca.com"}) == 0:
+            for pr in db["productos_brutos"].find({"user_email": "pablo@horeca.com"}):
+                pr_copy = dict(pr)
+                pr_copy.pop("_id", None)
+                pr_copy["user_email"] = "cuisto@horeca.com"
+                db["productos_brutos"].insert_one(pr_copy)
+
+        if db["pedidos"].count_documents({"user_email": "cuisto@horeca.com"}) == 0:
+            for o in db["pedidos"].find({"user_email": "pablo@horeca.com"}):
+                o_copy = dict(o)
+                o_copy.pop("_id", None)
+                o_copy["user_email"] = "cuisto@horeca.com"
+                db["pedidos"].insert_one(o_copy)
 
         return True
 
@@ -145,36 +171,30 @@ def init_db(db_name="fb_smartorder"):
 
 
 class DatabaseManager:
-    """Clase de infraestructura y persistencia que gestiona MongoDB y GridFS."""
+    """Clase helper para agrupar accesos a base de datos y GridFS."""
 
     @staticmethod
     def get_client():
-        """Devuelve el cliente activo de MongoClient."""
         return get_db_client()
 
     @staticmethod
     def get_database(db_name="fb_smartorder"):
-        """Devuelve la base de datos de MongoDB configurada."""
         return get_database(db_name)
 
     @staticmethod
     def get_gridfs(db_name="fb_smartorder"):
-        """Devuelve el bucket de GridFS para almacenamiento de archivos binarios."""
         return get_gridfs(db_name)
 
     @staticmethod
     def init_db(db_name="fb_smartorder"):
-        """Inicializa colecciones, índices y semillas maestras."""
         return init_db(db_name)
 
     @staticmethod
     def save_catalog_file(filename: str, file_bytes: bytes, supplier_id: str) -> str:
-        """Guarda un fichero original de catálogo en GridFS."""
         from .load import save_catalog_file as _save
         return _save(filename, file_bytes, supplier_id)
 
     @staticmethod
     def load_raw_products(provider_id: str, products: list, provider_name: str = None) -> int:
-        """Carga e indexa los productos procesados en MongoDB."""
         from .load import load_raw_products as _load
         return _load(provider_id, products, provider_name)

@@ -1,188 +1,478 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_paper"
-    android:fillViewport="true">
+    android:background="@color/bg_paper">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:padding="24dp">
+    <!-- Scrollable content area -->
+    <ScrollView
+        android:id="@+id/scrollProfileContent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavigation"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Sello de Encabezado -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/bg_stamp_header"
-            android:gravity="center"
+            android:gravity="center_horizontal"
             android:orientation="vertical"
+            android:paddingStart="20dp"
             android:paddingTop="16dp"
-            android:paddingBottom="16dp">
+            android:paddingEnd="20dp"
+            android:paddingBottom="24dp">
+
+            <!-- Sello de Encabezado -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_stamp_header"
+                android:gravity="center"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:fontFamily="@font/retro_condensed_italic"
+                    app:fontFamily="@font/retro_condensed_italic"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="0.04"
+                    android:text="AJUSTES"
+                    android:textColor="@color/bg_paper"
+                    android:textSize="40sp"
+                    android:autoSizeTextType="uniform"
+                    app:autoSizeTextType="uniform"
+                    android:autoSizeMinTextSize="24sp"
+                    app:autoSizeMinTextSize="24sp"
+                    android:autoSizeMaxTextSize="44sp"
+                    app:autoSizeMaxTextSize="44sp"
+                    android:autoSizeStepGranularity="1sp"
+                    app:autoSizeStepGranularity="1sp" />
+            </LinearLayout>
+
+            <!-- ACCESOS RÁPIDOS (Inicio / Historial) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-condensed"
+                    android:letterSpacing="0.06"
+                    android:text="NAVEGACIÓN RÁPIDA"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- Botón: Ir a Inicio -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnNavHome"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="@color/button_retro_bg"
+                    android:fontFamily="sans-serif-condensed"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="🏠  MENÚ PRINCIPAL (INICIO)"
+                    android:textColor="@color/bg_paper"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="4dp" />
+
+                <!-- Botón: Historial de Pedidos -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnNavHistory"
+                    style="@style/Widget.MaterialComponents.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="@color/button_retro_bg"
+                    android:fontFamily="sans-serif-condensed"
+                    android:gravity="start|center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="📋  HISTORIAL DE PEDIDOS"
+                    android:textColor="@color/bg_paper"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="4dp" />
+            </LinearLayout>
+
+            <!-- Tarjeta de Perfil / Área Personal -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_search_dashed"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-condensed"
+                    android:letterSpacing="0.05"
+                    android:text="ÁREA PERSONAL · DATOS DEL CHEF"
+                    android:textColor="@color/stamp_red_dark"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <!-- Campo: Nombre del Chef -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="Nombre del Chef / Cocinero:"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/etProfileChefName"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_search_input"
+                    android:fontFamily="sans-serif-condensed"
+                    android:inputType="textPersonName"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <!-- Campo: Restaurante -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="Nombre del Restaurante:"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/etProfileRestaurant"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_search_input"
+                    android:fontFamily="sans-serif-condensed"
+                    android:inputType="textCapWords"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <!-- Campo: Email -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="Correo de Acceso:"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvProfileEmail"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="4dp"
+                    android:background="#E8DFC8"
+                    android:fontFamily="sans-serif-condensed"
+                    android:gravity="center_vertical"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="pablo@horeca.com"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <!-- SECCIÓN CAMBIO DE CONTRASEÑA -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:letterSpacing="0.04"
+                    android:text="CAMBIAR CONTRASEÑA (OPCIONAL)"
+                    android:textColor="@color/stamp_red_dark"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="Nueva Contraseña:"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/etProfileNewPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_search_input"
+                    android:fontFamily="sans-serif-condensed"
+                    android:hint="Dejar en blanco para conservar actual"
+                    android:inputType="textPassword"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="Confirmar Nueva Contraseña:"
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/etProfileConfirmPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_search_input"
+                    android:fontFamily="sans-serif-condensed"
+                    android:hint="Repite la nueva contraseña"
+                    android:inputType="textPassword"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+
+                <ProgressBar
+                    android:id="@+id/pbProfileLoading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone" />
+
+                <!-- Botón Guardar -->
+                <Button
+                    android:id="@+id/btnProfileSave"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="16dp"
+                    android:backgroundTint="@color/button_retro_bg"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="GUARDAR CAMBIOS"
+                    android:textColor="@color/bg_paper"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Botón Cerrar Sesión -->
+                <Button
+                    android:id="@+id/btnProfileLogout"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="10dp"
+                    android:backgroundTint="@color/stamp_red"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="CERRAR SESIÓN"
+                    android:textColor="@color/bg_paper"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Botón Eliminar Cuenta -->
+                <Button
+                    android:id="@+id/btnProfileDeleteAccount"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="ELIMINAR CUENTA"
+                    android:textColor="@color/stamp_red_dark"
+                    app:strokeColor="@color/stamp_red_dark"
+                    app:strokeWidth="1dp"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <!-- Volver al Menú -->
+                <Button
+                    android:id="@+id/btnProfileBack"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:text="← Volver al Menú Principal"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Barra de Navegación Inferior (5 tabs) -->
+    <LinearLayout
+        android:id="@+id/bottomNavigation"
+        android:layout_width="0dp"
+        android:layout_height="60dp"
+        android:background="@drawable/bg_bottom_bar"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Tab 1: Comanda -->
+        <LinearLayout
+            android:id="@+id/navItemOrder"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavOrderIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_order" />
 
             <TextView
+                android:id="@+id/tvNavOrderLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-condensed"
-                android:letterSpacing="0.08"
-                android:text="MI CUENTA Y AJUSTES"
-                android:textColor="@color/white"
-                android:textSize="24sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-condensed"
-                android:letterSpacing="0.05"
-                android:text="GESTIÓN DE CHEF Y RESTAURANTE"
-                android:textColor="#F0D0D0"
+                android:text="Comanda"
+                android:textColor="@color/text_secondary"
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Tarjeta de Perfil -->
+        <!-- Tab 2: Catálogo -->
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/bg_search_dashed"
-            android:orientation="vertical"
-            android:padding="20dp">
+            android:id="@+id/navItemCatalog"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavCatalogIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_catalog" />
 
             <TextView
+                android:id="@+id/tvNavCatalogLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-condensed"
-                android:text="DATOS DEL CHEF EN TURNO"
-                android:textColor="@color/stamp_red_dark"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <!-- Campo: Nombre del Chef -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:fontFamily="sans-serif-condensed"
-                android:text="Nombre del Chef / Cocinero:"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/etProfileChefName"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:layout_marginTop="4dp"
-                android:background="@drawable/bg_search_input"
-                android:fontFamily="sans-serif-condensed"
-                android:inputType="textPersonName"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:textColor="@color/text_primary"
-                android:textSize="14sp" />
-
-            <!-- Campo: Restaurante -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:fontFamily="sans-serif-condensed"
-                android:text="Nombre del Restaurante:"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/etProfileRestaurant"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:layout_marginTop="4dp"
-                android:background="@drawable/bg_search_input"
-                android:fontFamily="sans-serif-condensed"
-                android:inputType="textCapWords"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:textColor="@color/text_primary"
-                android:textSize="14sp" />
-
-            <!-- Campo: Email -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:fontFamily="sans-serif-condensed"
-                android:text="Correo de Acceso:"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/tvProfileEmail"
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:layout_marginTop="4dp"
-                android:background="#E8DFC8"
-                android:fontFamily="sans-serif-condensed"
-                android:gravity="center_vertical"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:text="pablo@horeca.com"
+                android:text="Catálogo"
                 android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
+                android:textSize="11sp" />
+        </LinearLayout>
 
-            <ProgressBar
-                android:id="@+id/pbProfileLoading"
+        <!-- Tab 3: Botón Central Cámara -->
+        <LinearLayout
+            android:id="@+id/navItemCamera"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_camera_fab"
+                android:gravity="center">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_nav_camera" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- Tab 4: Proveedores -->
+        <LinearLayout
+            android:id="@+id/navItemSuppliers"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavSuppliersIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_suppliers" />
+
+            <TextView
+                android:id="@+id/tvNavSuppliersLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="10dp"
-                android:visibility="gone" />
-
-            <!-- Botón Guardar -->
-            <Button
-                android:id="@+id/btnProfileSave"
-                android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:layout_marginTop="18dp"
-                android:backgroundTint="@color/button_retro_bg"
                 android:fontFamily="sans-serif-condensed"
-                android:text="GUARDAR CAMBIOS 💾"
-                android:textColor="@color/white"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <!-- Botón Cerrar Sesión -->
-            <Button
-                android:id="@+id/btnProfileLogout"
-                android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:layout_marginTop="10dp"
-                android:backgroundTint="@color/stamp_red"
-                android:fontFamily="sans-serif-condensed"
-                android:text="CERRAR SESIÓN 🚪"
-                android:textColor="@color/white"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <!-- Volver -->
-            <Button
-                android:id="@+id/btnProfileBack"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:layout_marginTop="4dp"
-                android:fontFamily="sans-serif-condensed"
-                android:text="← Volver al Menú Principal"
+                android:text="Proveedores"
                 android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
+                android:textSize="11sp" />
+        </LinearLayout>
 
+        <!-- Tab 5: Ajustes (ACTIVO) -->
+        <LinearLayout
+            android:id="@+id/navItemSettings"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivNavSettingsIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_nav_settings"
+                app:tint="@color/stamp_red" />
+
+            <TextView
+                android:id="@+id/tvNavSettingsLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-condensed"
+                android:text="Ajustes"
+                android:textColor="@color/stamp_red"
+                android:textSize="11sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
     </LinearLayout>
-</ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

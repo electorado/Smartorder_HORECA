@@ -51,12 +51,6 @@ class LandingActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // ⚙️ Ruedita superior de Ajustes / Perfil
-        binding.btnLandingSettings.setOnClickListener {
-            val intent = Intent(this, ProfileActivity::class.java)
-            startActivity(intent)
-        }
-
         // Tocar tarjeta de perfil para ver o editar datos
         binding.layoutChefCard.setOnClickListener {
             val intent = Intent(this, ProfileActivity::class.java)
@@ -87,6 +81,39 @@ class LandingActivity : AppCompatActivity() {
                 putExtra("EXTRA_START_SCAN", true)
             }
             startActivity(intent)
+        }
+
+        setupBottomNavigation()
+    }
+
+    private fun setupBottomNavigation() {
+        binding.navItemOrder.setOnClickListener {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                putExtra("EXTRA_TAB_INDEX", 0)
+            }
+            startActivity(intent)
+        }
+
+        binding.navItemCatalog.setOnClickListener {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                putExtra("EXTRA_TAB_INDEX", 1)
+            }
+            startActivity(intent)
+        }
+
+        binding.navItemCamera.setOnClickListener {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                putExtra("EXTRA_START_SCAN", true)
+            }
+            startActivity(intent)
+        }
+
+        binding.navItemSuppliers.setOnClickListener {
+            startActivity(Intent(this, SuppliersActivity::class.java))
+        }
+
+        binding.navItemSettings.setOnClickListener {
+            startActivity(Intent(this, ProfileActivity::class.java))
         }
     }
 }

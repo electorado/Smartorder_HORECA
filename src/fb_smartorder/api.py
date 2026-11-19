@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Query, Header
+from fastapi import FastAPI, APIRouter, File, UploadFile, Form, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from contextlib import asynccontextmanager
@@ -12,7 +12,7 @@ from bson import ObjectId
 from .database import get_database, init_db, get_db_client, hash_password
 from .models import (
     Order, OrderItem, SupplierSubOrder, Supplier,
-    UserRegister, UserLogin, UserProfile, UserUpdate,
+    UserRegister, UserLogin, UserProfile, UserUpdate, ForgotPasswordRequest,
     ProductOverrideUpdate
 )
 from .extract import extract_excel, extract_pdf, extract_catalog, extract_catalog_with_supplier
@@ -21,7 +21,7 @@ from .load import load_raw_products, save_catalog_file
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Gestión moderna del ciclo de vida de FastAPI (sustituye al deprecado on_event)."""
+    """Inicialización de servicios y base de datos al arrancar."""
     try:
         init_db()
     except Exception as e:
@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="F&B SmartOrder API",
-    description="Backend API asíncrono para el procesamiento de catálogos y automatización de pedidos en Hostelería.",
+    description="API para la gestión de catálogos, pedidos y proveedores en hostelería.",
     version="0.1.0",
     lifespan=lifespan
 )
@@ -60,148 +60,10 @@ def read_root():
         "version": "0.1.0"
     }
 
-# ==============================================================================
-# Rutas de Autenticación y Perfil de Usuario
-# ==============================================================================
 
-@app.post("/api/v1/auth/register")
-def register_user(user_data: UserRegister):
-    """Registra un nuevo usuario/establecimiento en el sistema."""
-    try:
-        db = get_database()
-        email_clean = user_data.email.lower().strip()
-        
-        existing = db["usuarios"].find_one({"email": email_clean})
-        if existing:
-            raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado.")
-        
-        new_user = {
-            "name": user_data.name.strip(),
-            "email": email_clean,
-            "password_hash": hash_password(user_data.password),
-            "restaurant_name": user_data.restaurant_name.strip(),
-            "created_at": datetime.utcnow()
-        }
-        res = db["usuarios"].insert_one(new_user)
-        
-        return {
-            "message": "Usuario registrado exitosamente.",
-            "user": {
-                "id": str(res.inserted_id),
-                "name": new_user["name"],
-                "email": new_user["email"],
-                "restaurant_name": new_user["restaurant_name"]
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# --- Funciones auxiliares ---
 
-@app.post("/api/v1/auth/login")
-def login_user(creds: UserLogin):
-    """Autentica un usuario mediante email y contraseña."""
-    try:
-        db = get_database()
-        email_clean = creds.email.lower().strip()
-        pwd_hash = hash_password(creds.password)
-        
-        user = db["usuarios"].find_one({"email": email_clean})
-        if not user or user.get("password_hash") != pwd_hash:
-            raise HTTPException(status_code=401, detail="Credenciales incorrectas. Verifica el email y contraseña.")
-        
-        return {
-            "message": "Inicio de sesión correcto.",
-            "user": {
-                "id": str(user.get("_id", "")),
-                "name": user.get("name", "Chef"),
-                "email": user.get("email", email_clean),
-                "restaurant_name": user.get("restaurant_name", "Mi Restaurante")
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/v1/auth/profile")
-def get_user_profile(email: str = Query(...)):
-    """Obtiene los datos del perfil activo."""
-    try:
-        db = get_database()
-        user = db["usuarios"].find_one({"email": email.lower().strip()})
-        if not user:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado.")
-        
-        return {
-            "user": {
-                "id": str(user.get("_id", "")),
-                "name": user.get("name", ""),
-                "email": user.get("email", ""),
-                "restaurant_name": user.get("restaurant_name", "")
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.put("/api/v1/auth/profile")
-def update_user_profile(update_data: UserUpdate, email: str = Query(...)):
-    """Actualiza los datos del perfil del cocinero o restaurante."""
-    try:
-        db = get_database()
-        email_clean = email.lower().strip()
-        
-        updates = {}
-        if update_data.name:
-            updates["name"] = update_data.name.strip()
-        if update_data.restaurant_name:
-            updates["restaurant_name"] = update_data.restaurant_name.strip()
-        if update_data.password and len(update_data.password) >= 4:
-            updates["password_hash"] = hash_password(update_data.password)
-            
-        if not updates:
-            return {"message": "Sin cambios que aplicar."}
-            
-        res = db["usuarios"].update_one({"email": email_clean}, {"$set": updates})
-        if res.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado.")
-            
-        updated_user = db["usuarios"].find_one({"email": email_clean})
-        return {
-            "message": "Perfil actualizado correctamente.",
-            "user": {
-                "id": str(updated_user.get("_id", "")),
-                "name": updated_user.get("name", ""),
-                "email": updated_user.get("email", ""),
-                "restaurant_name": updated_user.get("restaurant_name", "")
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/v1/suppliers")
-def get_suppliers(
-    user_email: Optional[str] = Query(None),
-    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
-):
-    """Devuelve la lista de proveedores del cocinero."""
-    try:
-        db = get_database()
-        u_email = (x_user_email or user_email or "").lower().strip()
-        filter_query = {}
-        if u_email:
-            filter_query["user_email"] = u_email
-        suppliers = list(db["proveedores"].find(filter_query, {"_id": 0}))
-        return {"suppliers": suppliers}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def resolve_user_email(*candidates, fallback: str = "pablo@horeca.com") -> str:
+def resolve_user_email(*candidates, fallback: str = "cuisto@horeca.com") -> str:
     """Extrae el email de usuario válido ignorando instancias de Query o Header de FastAPI."""
     for c in candidates:
         if isinstance(c, str) and c.strip():
@@ -242,13 +104,324 @@ def sanitize_whatsapp_phone(raw_phone: Optional[str]) -> str:
     return selected
 
 
-@app.post("/api/v1/suppliers")
+def send_order_email_smtp(
+    supplier_name: str,
+    supplier_email: str,
+    user_email: str,
+    email_body: str,
+    db
+) -> tuple[bool, str]:
+    """Envía el pedido por email al proveedor mediante SMTP (Brevo)."""
+    import smtplib
+    from email.message import EmailMessage
+
+    smtp_host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USER", "c3e19e001@smtp-brevo.com")
+    smtp_pwd = os.getenv("SMTP_PASSWORD", "xsmtpsib-6965a5e17ef4c854c9e1e2b137c506ffffaf43bf1870e770d7a9debcd55e2bcf-1dCRyMTa28bNE0d5")
+    smtp_from = os.getenv("SMTP_FROM", "pablomoncayovega@gmail.com")
+
+    user_doc = db["usuarios"].find_one({"email": user_email})
+    chef_name = (user_doc.get("name") if user_doc else None) or "Cocinero"
+    restaurant_name = (user_doc.get("restaurant_name") if user_doc else None) or "Hostelería"
+
+    msg = EmailMessage()
+    msg["Subject"] = f"Pedido: {restaurant_name} ({chef_name}) - {supplier_name} - {datetime.now().strftime('%d/%m/%Y')}"
+    msg["From"] = f"{restaurant_name} ({chef_name}) <{smtp_from}>"
+    msg["Reply-To"] = user_email
+    msg["To"] = supplier_email or "pedidos@proveedor.com"
+    msg.set_content(email_body)
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
+        if os.getenv("SMTP_USE_TLS", "true").lower() == "true":
+            server.starttls()
+        server.login(smtp_user, smtp_pwd)
+        server.send_message(msg)
+
+    return True, "enviado_smtp"
+
+
+def send_password_recovery_email_brevo(
+    to_email: str,
+    chef_name: str,
+    restaurant_name: str,
+    temp_password: str
+) -> tuple[bool, str]:
+    """Envía la contraseña temporal al usuario a través del servicio SMTP de Brevo."""
+    import smtplib
+    from email.message import EmailMessage
+
+    smtp_host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USER", "c3e19e001@smtp-brevo.com")
+    smtp_pwd = os.getenv("SMTP_PASSWORD", "xsmtpsib-6965a5e17ef4c854c9e1e2b137c506ffffaf43bf1870e770d7a9debcd55e2bcf-1dCRyMTa28bNE0d5")
+    smtp_from = os.getenv("SMTP_FROM", "pablomoncayovega@gmail.com")
+
+    msg = EmailMessage()
+    msg["Subject"] = "Recuperación de contraseña · F&B SmartOrder"
+    msg["From"] = f"F&B SmartOrder <{smtp_from}>"
+    msg["To"] = to_email
+
+    body = (
+        f"Hola {chef_name},\n\n"
+        f"Has solicitado restablecer tu contraseña para acceder a la aplicación F&B SmartOrder ({restaurant_name}).\n\n"
+        f"Tu nueva contraseña temporal de acceso es:\n"
+        f"----------------------------------------\n"
+        f"  {temp_password}\n"
+        f"----------------------------------------\n\n"
+        f"Inicia sesión con esta clave y podrás cambiarla por la que desees desde la sección 'Ajustes > Área Personal'.\n\n"
+        f"Atentamente,\n"
+        f"El equipo de F&B SmartOrder\n"
+    )
+    msg.set_content(body)
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
+        if os.getenv("SMTP_USE_TLS", "true").lower() == "true":
+            server.starttls()
+        server.login(smtp_user, smtp_pwd)
+        server.send_message(msg)
+
+    return True, "enviado_brevo"
+
+
+
+# --- Routers de la API ---
+auth_router = APIRouter(prefix="/api/v1/auth", tags=["Autenticación"])
+suppliers_router = APIRouter(prefix="/api/v1/suppliers", tags=["Proveedores"])
+catalog_router = APIRouter(prefix="/api/v1", tags=["Catálogo y Productos"])
+orders_router = APIRouter(prefix="/api/v1/orders", tags=["Pedidos"])
+ocr_router = APIRouter(prefix="/api/v1", tags=["Reconocimiento de Notas"])
+
+# --- Rutas de Autenticación y Perfil de Usuario ---
+
+@auth_router.post("/register")
+def register_user(user_data: UserRegister):
+    """Registra un nuevo usuario o restaurante."""
+    try:
+        db = get_database()
+        email_clean = user_data.email.lower().strip()
+        
+        existing = db["usuarios"].find_one({"email": email_clean})
+        if existing:
+            raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado.")
+        
+        new_user = {
+            "name": user_data.name.strip(),
+            "email": email_clean,
+            "password_hash": hash_password(user_data.password),
+            "restaurant_name": user_data.restaurant_name.strip(),
+            "created_at": datetime.utcnow()
+        }
+        res = db["usuarios"].insert_one(new_user)
+        
+        return {
+            "message": "Usuario registrado exitosamente.",
+            "user": {
+                "id": str(res.inserted_id),
+                "name": new_user["name"],
+                "email": new_user["email"],
+                "restaurant_name": new_user["restaurant_name"]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@auth_router.post("/login")
+def login_user(creds: UserLogin):
+    """Comprueba las credenciales del usuario e inicia sesión."""
+    try:
+        db = get_database()
+        email_clean = creds.email.lower().strip()
+        pwd_hash = hash_password(creds.password)
+        
+        user = db["usuarios"].find_one({"email": email_clean})
+        if not user or user.get("password_hash") != pwd_hash:
+            raise HTTPException(status_code=401, detail="Credenciales incorrectas. Verifica el email y contraseña.")
+        
+        return {
+            "message": "Inicio de sesión correcto.",
+            "user": {
+                "id": str(user.get("_id", "")),
+                "name": user.get("name", "Chef"),
+                "email": user.get("email", email_clean),
+                "restaurant_name": user.get("restaurant_name", "Mi Restaurante")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@auth_router.get("/profile")
+def get_user_profile(email: str = Query(...)):
+    """Devuelve los datos del perfil de usuario."""
+    try:
+        db = get_database()
+        user = db["usuarios"].find_one({"email": email.lower().strip()})
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+        
+        return {
+            "user": {
+                "id": str(user.get("_id", "")),
+                "name": user.get("name", ""),
+                "email": user.get("email", ""),
+                "restaurant_name": user.get("restaurant_name", "")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@auth_router.put("/profile")
+def update_user_profile(update_data: UserUpdate, email: str = Query(...)):
+    """Actualiza la información del perfil del usuario."""
+    try:
+        db = get_database()
+        email_clean = email.lower().strip()
+        
+        updates = {}
+        if update_data.name:
+            updates["name"] = update_data.name.strip()
+        if update_data.restaurant_name:
+            updates["restaurant_name"] = update_data.restaurant_name.strip()
+        if update_data.password and len(update_data.password) >= 4:
+            updates["password_hash"] = hash_password(update_data.password)
+            
+        if not updates:
+            return {"message": "Sin cambios que aplicar."}
+            
+        res = db["usuarios"].update_one({"email": email_clean}, {"$set": updates})
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+            
+        updated_user = db["usuarios"].find_one({"email": email_clean})
+        return {
+            "message": "Perfil actualizado correctamente.",
+            "user": {
+                "id": str(updated_user.get("_id", "")),
+                "name": updated_user.get("name", ""),
+                "email": updated_user.get("email", ""),
+                "restaurant_name": updated_user.get("restaurant_name", "")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@auth_router.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest):
+    """Permite restablecer la contraseña enviando una clave temporal a través de Brevo."""
+    import random
+    import string
+    try:
+        db = get_database()
+        email_clean = req.email.lower().strip()
+        user = db["usuarios"].find_one({"email": email_clean})
+        if not user:
+            raise HTTPException(status_code=404, detail="No existe ninguna cuenta asociada a este correo electrónico.")
+
+        if req.new_password and len(req.new_password) >= 4:
+            temp_password = req.new_password
+        else:
+            rand_digits = "".join(random.choices(string.digits, k=4))
+            temp_password = f"Smart{rand_digits}"
+
+        # Actualizar hash en base de datos
+        db["usuarios"].update_one(
+            {"email": email_clean},
+            {"$set": {"password_hash": hash_password(temp_password)}}
+        )
+
+        chef_name = user.get("name", "Chef")
+        restaurant_name = user.get("restaurant_name", "Cocina")
+
+        # Enviar correo mediante Brevo
+        email_sent = False
+        try:
+            send_password_recovery_email_brevo(
+                to_email=email_clean,
+                chef_name=chef_name,
+                restaurant_name=restaurant_name,
+                temp_password=temp_password
+            )
+            email_sent = True
+        except Exception as mail_err:
+            print(f"[BREVO] Error enviando email de recuperación: {mail_err}")
+            email_sent = False
+
+        if email_sent:
+            return {
+                "message": f"Te hemos enviado un correo de Brevo con tu contraseña temporal a {email_clean}.",
+                "temp_password": temp_password,
+                "email_sent": True
+            }
+        else:
+            return {
+                "message": f"Contraseña temporal generada: {temp_password} (aviso: no se pudo enviar el correo de Brevo).",
+                "temp_password": temp_password,
+                "email_sent": False
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@auth_router.delete("/account")
+def delete_account(
+    email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Elimina la cuenta del usuario."""
+    try:
+        db = get_database()
+        email_clean = (x_user_email or email or "").lower().strip()
+        if not email_clean:
+            raise HTTPException(status_code=400, detail="Se requiere el email de la cuenta a eliminar.")
+        
+        user = db["usuarios"].find_one({"email": email_clean})
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+            
+        db["usuarios"].delete_one({"email": email_clean})
+        return {"message": "Cuenta eliminada correctamente."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@suppliers_router.get("")
+def get_suppliers(
+    user_email: Optional[str] = Query(None),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email")
+):
+    """Lista los proveedores asociados al usuario."""
+    try:
+        db = get_database()
+        u_email = (x_user_email or user_email or "").lower().strip()
+        filter_query = {}
+        if u_email:
+            filter_query["user_email"] = u_email
+        suppliers = list(db["proveedores"].find(filter_query, {"_id": 0}))
+        return {"suppliers": suppliers}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@suppliers_router.post("")
 def create_or_update_supplier(
     supplier: Supplier,
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Crea o actualiza un proveedor asociado al cocinero."""
+    """Crea o actualiza los datos de un proveedor."""
     try:
         db = get_database()
         u_email = resolve_user_email(x_user_email, user_email)
@@ -280,14 +453,14 @@ def create_or_update_supplier(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error guardando proveedor: {str(e)}")
 
-@app.put("/api/v1/suppliers/{supplier_id}")
+@suppliers_router.put("/{supplier_id}")
 def update_supplier(
     supplier_id: str,
     supplier: Supplier,
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Actualiza los datos de contacto de un proveedor existente y sincroniza su catálogo."""
+    """Actualiza los datos del proveedor y sincroniza sus productos."""
     try:
         db = get_database()
         u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
@@ -311,13 +484,13 @@ def update_supplier(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error actualizando proveedor: {str(e)}")
 
-@app.delete("/api/v1/suppliers/{supplier_id}")
+@suppliers_router.delete("/{supplier_id}")
 def delete_supplier(
     supplier_id: str,
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Elimina un proveedor y limpia automáticamente sus productos asociados del catálogo del cocinero."""
+    """Elimina un proveedor y sus productos asociados del catálogo."""
     try:
         db = get_database()
         u_email = (x_user_email or user_email or "").lower().strip()
@@ -337,9 +510,9 @@ def delete_supplier(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error eliminando proveedor: {str(e)}")
 
-@app.get("/api/v1/ingredients")
+@catalog_router.get("/ingredients")
 def get_ingredients(query: Optional[str] = None):
-    """Devuelve el catálogo de ingredientes maestros enriquecido con las mejores ofertas de proveedores."""
+    """Lista los ingredientes maestros con sus mejores ofertas disponibles."""
     try:
         db = get_database()
         filter_query = {}
@@ -370,7 +543,7 @@ def get_ingredients(query: Optional[str] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/products")
+@catalog_router.get("/products")
 def get_products(
     query: Optional[str] = Query(None, description="Filtro opcional por nombre o categoría"),
     supplier_id: Optional[str] = Query(None, description="Filtro opcional por proveedor"),
@@ -378,7 +551,7 @@ def get_products(
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Devuelve el catálogo de productos y ofertas del cocinero con soporte para favoritos, ocultos y personalizaciones."""
+    """Lista los productos del catálogo con soporte para filtros, favoritos y ocultos."""
     try:
         db = get_database()
         u_email = (x_user_email if isinstance(x_user_email, str) else user_email if isinstance(user_email, str) else "").lower().strip()
@@ -463,14 +636,14 @@ def get_products(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/api/v1/products/{product_id}/override")
+@catalog_router.patch("/products/{product_id}/override")
 def update_product_override(
     product_id: str,
     override_data: ProductOverrideUpdate,
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Permite al cocinero personalizar el nombre, precio, unidad, estado favorito u oculto de un producto."""
+    """Actualiza las personalizaciones de un producto (nombre, precio, favoritos)."""
     try:
         db = get_database()
         u_email = (x_user_email or user_email or "").lower().strip()
@@ -524,13 +697,13 @@ def update_product_override(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/products/{product_id}/favorite")
+@catalog_router.post("/products/{product_id}/favorite")
 def toggle_favorite(
     product_id: str,
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Alterna el estado favorito / habitual de un producto."""
+    """Marca o desmarca un producto como favorito/habitual."""
     try:
         db = get_database()
         u_email = (x_user_email or user_email or "").lower().strip()
@@ -572,13 +745,13 @@ def toggle_favorite(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/products/{product_id}/hide")
+@catalog_router.post("/products/{product_id}/hide")
 def toggle_hide(
     product_id: str,
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Alterna el estado oculto / archivado de un producto."""
+    """Oculta o muestra un producto en el catálogo."""
     try:
         db = get_database()
         u_email = (x_user_email or user_email or "").lower().strip()
@@ -620,7 +793,7 @@ def toggle_hide(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/catalogs/upload")
+@catalog_router.post("/catalogs/upload")
 async def upload_catalog(
     supplier_id: str = Form("auto"),
     is_annex: bool = Form(False),
@@ -628,7 +801,7 @@ async def upload_catalog(
     x_user_email: Optional[str] = Header(None, alias="X-User-Email"),
     file: UploadFile = File(...)
 ):
-    """Sube un archivo de catálogo (PDF o Excel), auto-detecta el proveedor si es necesario, lo almacena en GridFS y ejecuta el pipeline ETL asociado al cocinero."""
+    """Procesa y carga un catálogo (PDF o Excel) asociándolo al proveedor."""
     try:
         db = get_database()
         u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
@@ -763,13 +936,13 @@ async def upload_catalog(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando catálogo: {str(e)}")
 
-@app.post("/api/v1/orders")
+@orders_router.post("")
 def create_order(
     order_data: Order,
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Crea y consolida un nuevo pedido en el sistema, dividiéndolo automáticamente por proveedores y generando mensajes WhatsApp."""
+    """Crea un pedido agrupándolo por proveedor y generando enlaces de WhatsApp o email."""
     try:
         db = get_database()
         u_email = resolve_user_email(x_user_email, user_email, getattr(order_data, "user_email", None))
@@ -839,38 +1012,21 @@ def create_order(
             else:
                 v["whatsapp_url"] = f"https://api.whatsapp.com/send?text={urllib.parse.quote(wa_text)}"
 
-            # Envío automático por Email desde servidor si el canal preferido es email (Opción C con Brevo SMTP)
+            # Envío automático por email si el proveedor lo tiene configurado
             if v.get("preferred_channel", "").lower() == "email":
                 try:
-                    smtp_host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
-                    smtp_port = int(os.getenv("SMTP_PORT", 587))
-                    smtp_user = os.getenv("SMTP_USER", "c3e19e001@smtp-brevo.com")
-                    smtp_pwd = os.getenv("SMTP_PASSWORD", "xsmtpsib-6965a5e17ef4c854c9e1e2b137c506ffffaf43bf1870e770d7a9debcd55e2bcf-1dCRyMTa28bNE0d5")
-                    smtp_from = os.getenv("SMTP_FROM", "pablomoncayovega@gmail.com")
-
-                    user_doc = db["usuarios"].find_one({"email": u_email})
-                    chef_name = (user_doc.get("name") if user_doc else None) or "Cocinero"
-                    restaurant_name = (user_doc.get("restaurant_name") if user_doc else None) or "Hostelería"
-
-                    import smtplib
-                    from email.message import EmailMessage
-                    msg = EmailMessage()
-                    msg["Subject"] = f"📦 Pedido Hostelería: {restaurant_name} ({chef_name}) - {s_name} - {datetime.now().strftime('%d/%m/%Y')}"
-                    msg["From"] = f"{restaurant_name} ({chef_name}) <{smtp_from}>"
-                    msg["Reply-To"] = u_email
-                    msg["To"] = v.get("supplier_email") or "pedidos@proveedor.com"
-                    msg.set_content(wa_text)
-
-                    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
-                        if os.getenv("SMTP_USE_TLS", "true").lower() == "true":
-                            server.starttls()
-                        server.login(smtp_user, smtp_pwd)
-                        server.send_message(msg)
-                    v["email_dispatched"] = True
-                    v["email_status"] = "enviado_smtp"
-                    print(f"✅ [EMAIL BREVO] Pedido para {s_name} enviado con éxito a {v.get('supplier_email')}")
+                    ok, status = send_order_email_smtp(
+                        supplier_name=s_name,
+                        supplier_email=v.get("supplier_email") or "",
+                        user_email=u_email,
+                        email_body=wa_text,
+                        db=db
+                    )
+                    v["email_dispatched"] = ok
+                    v["email_status"] = status
+                    print(f"[EMAIL] Pedido enviado a {s_name} ({v.get('supplier_email')})")
                 except Exception as mail_err:
-                    print(f"⚠️ Error enviando email con Brevo: {mail_err}")
+                    print(f"[EMAIL] Error enviando email: {mail_err}")
                     v["email_dispatched"] = False
                     v["email_status"] = f"error: {str(mail_err)}"
             else:
@@ -891,7 +1047,7 @@ def create_order(
         order_dict["id"] = order_id
         order_dict["_id"] = order_id
 
-        # Smart Habitualization: Auto-marcar como habituales/favoritos los productos pedidos
+        # Marcar productos pedidos como habituales
         for item in order_data.items:
             try:
                 p_match = None
@@ -926,7 +1082,7 @@ def create_order(
                         {"$set": {"is_favorite": True}}
                     )
             except Exception as fav_err:
-                print(f"⚠️ Error auto-marcando favorito: {fav_err}")
+                print(f"[FAVORITOS] Error al actualizar habitual: {fav_err}")
 
         return {
             "message": "Pedido consolidado creado con éxito.",
@@ -937,12 +1093,12 @@ def create_order(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creando pedido: {str(e)}")
 
-@app.get("/api/v1/orders")
+@orders_router.get("")
 def list_orders(
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Obtiene el historial de pedidos del cocinero."""
+    """Devuelve el historial de pedidos del usuario."""
     try:
         db = get_database()
         u_email = (x_user_email or user_email or "").lower().strip()
@@ -955,9 +1111,9 @@ def list_orders(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/orders/{order_id}/send")
+@orders_router.post("/{order_id}/send")
 def send_order(order_id: str):
-    """Simula/dispara el envío de las órdenes de pedido por correo a cada proveedor."""
+    """Marca el pedido como enviado y simula el despacho a cada proveedor."""
     try:
         db = get_database()
         try:
@@ -992,13 +1148,13 @@ def send_order(order_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/ocr/fridge-list")
+@ocr_router.post("/ocr/fridge-list")
 async def scan_fridge_photo(
     file: UploadFile = File(...),
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Recibe una foto de la lista de la nevera/pizarra, extrae los ítems y los mapea con el catálogo del cocinero."""
+    """Procesa una imagen de notas o pizarra y busca coincidencias en el catálogo."""
     try:
         from .vision_ai import process_fridge_photo
         u_email = (x_user_email or user_email or "pablo@horeca.com").lower().strip()
@@ -1066,12 +1222,18 @@ async def scan_fridge_photo(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar foto de la nevera: {str(e)}")
 
-@app.post("/api/v1/scan-kitchen-notes")
+@ocr_router.post("/scan-kitchen-notes")
 async def scan_kitchen_notes(
     file: UploadFile = File(...),
     user_email: Optional[str] = Query(None),
     x_user_email: Optional[str] = Header(None, alias="X-User-Email")
 ):
-    """Alias para escanear notas manuscritas o listas de cocina."""
+    """Alias para escanear notas manuscritas de cocina."""
     return await scan_fridge_photo(file, user_email=user_email, x_user_email=x_user_email)
 
+# --- Registro de Routers ---
+app.include_router(auth_router)
+app.include_router(suppliers_router)
+app.include_router(catalog_router)
+app.include_router(orders_router)
+app.include_router(ocr_router)

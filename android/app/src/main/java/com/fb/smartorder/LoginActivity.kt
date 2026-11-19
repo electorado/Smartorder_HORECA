@@ -23,13 +23,18 @@ class LoginActivity : AppCompatActivity() {
 
         // Cargar email previo o demo por defecto
         val savedEmail = SessionManager.getUserEmail(this)
-        binding.etLoginEmail.setText(if (savedEmail.isNotBlank()) savedEmail else "pablo@horeca.com")
+        binding.etLoginEmail.setText(if (savedEmail.isNotBlank()) savedEmail else "cuisto@horeca.com")
         binding.etLoginPassword.setText("password123")
 
         setupListeners()
     }
 
     private fun setupListeners() {
+        // ¿Has olvidado la contraseña?
+        binding.btnForgotPassword.setOnClickListener {
+            showForgotPasswordDialog()
+        }
+
         // Navegar a Registro
         binding.btnGoToRegister.setOnClickListener {
             val intent = Intent(this, RegisterActivity::class.java)
@@ -74,10 +79,10 @@ class LoginActivity : AppCompatActivity() {
                     binding.btnLoginEnter.isEnabled = true
 
                     // Modo de rescate / Offline: Si el servidor no responde pero es el usuario demo, permitir acceso
-                    if (email.equals("pablo@horeca.com", ignoreCase = true) && password == "password123") {
+                    if ((email.equals("cuisto@horeca.com", ignoreCase = true) || email.equals("pablo@horeca.com", ignoreCase = true)) && password == "password123") {
                         SessionManager.saveSession(
                             this@LoginActivity,
-                            chefName = "Pablo Moncayo",
+                            chefName = if (email.startsWith("cuisto", ignoreCase = true)) "Chef Cuisto" else "Pablo Moncayo",
                             restaurantName = "Restaurante El Faro",
                             email = email
                         )
@@ -97,5 +102,51 @@ class LoginActivity : AppCompatActivity() {
         }
         startActivity(intent)
         finish()
+    }
+
+    private fun showForgotPasswordDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_forgot_password, null)
+        val etEmail = dialogView.findViewById<android.widget.EditText>(R.id.etForgotEmail)
+
+        val currentEmail = binding.etLoginEmail.text.toString().trim()
+        if (currentEmail.isNotEmpty()) {
+            etEmail.setText(currentEmail)
+        }
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .setPositiveButton("ENVIAR EMAIL") { _, _ ->
+                val email = etEmail.text.toString().trim()
+
+                if (email.isEmpty()) {
+                    Toast.makeText(this, "Introduce el correo de tu cuenta.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                binding.pbLoginLoading.visibility = View.VISIBLE
+                lifecycleScope.launch {
+                    try {
+                        val response = RetrofitClient.apiService.forgotPassword(
+                            com.fb.smartorder.model.ForgotPasswordRequest(email)
+                        )
+                        binding.pbLoginLoading.visibility = View.GONE
+                        if (response.isSuccessful) {
+                            val msg = response.body()?.get("message") as? String 
+                                ?: "Email enviado con Brevo. Revisa tu bandeja de entrada."
+                            Toast.makeText(this@LoginActivity, msg, Toast.LENGTH_LONG).show()
+                            binding.etLoginEmail.setText(email)
+                            binding.etLoginPassword.setText("")
+                        } else {
+                            val err = response.errorBody()?.string() ?: "Error al enviar email"
+                            Toast.makeText(this@LoginActivity, "Error: $err", Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Exception) {
+                        binding.pbLoginLoading.visibility = View.GONE
+                        Toast.makeText(this@LoginActivity, "No se pudo conectar: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("CANCELAR", null)
+            .show()
     }
 }

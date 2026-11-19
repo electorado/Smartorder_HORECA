@@ -13,6 +13,11 @@ interface ApiService {
         @Body req: UserLoginRequest
     ): Response<AuthResponse>
 
+    @POST("api/v1/auth/forgot-password")
+    suspend fun forgotPassword(
+        @Body req: ForgotPasswordRequest
+    ): Response<Map<String, Any>>
+
     @POST("api/v1/auth/register")
     suspend fun register(
         @Body req: UserRegisterRequest
@@ -28,6 +33,11 @@ interface ApiService {
         @Query("email") email: String,
         @Body req: UserUpdateRequest
     ): Response<AuthResponse>
+
+    @DELETE("api/v1/auth/account")
+    suspend fun deleteAccount(
+        @Query("email") email: String
+    ): Response<Map<String, Any>>
 
     @GET("api/v1/products")
     suspend fun getProducts(
