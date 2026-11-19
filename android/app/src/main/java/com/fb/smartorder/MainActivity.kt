@@ -368,7 +368,7 @@ class MainActivity : AppCompatActivity() {
         suborders: List<SupplierSubOrderResponse>,
         orderDetail: OrderDetailResponse? = null
     ) {
-        OrderDispatchDialog.show(this, orderId, suborders, orderDetail) {
+        OrderDispatchDialog.show(this, orderId, suborders, orderDetail, viewModel) {
             clearComandaAndRefresh()
         }
     }

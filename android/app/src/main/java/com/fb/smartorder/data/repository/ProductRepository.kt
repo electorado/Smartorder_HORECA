@@ -84,6 +84,21 @@ class ProductRepository(
         }
     }
 
+    suspend fun dispatchOrderEmail(orderId: String, supplierId: String? = null): Result<String> {
+        return try {
+            val response = api.dispatchOrderEmail(orderId, supplierId)
+            if (response.isSuccessful && response.body() != null) {
+                val msg = response.body()?.get("message") as? String ?: "Pedido enviado por email vía Brevo SMTP"
+                Result.success(msg)
+            } else {
+                val errBody = response.errorBody()?.string() ?: response.message()
+                Result.failure(Exception("Error ${response.code()}: $errBody"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getSuppliers(): Result<List<Supplier>> {
         return try {
             val response = api.getSuppliers()

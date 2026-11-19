@@ -163,4 +163,15 @@ class ProductViewModel(
             onResult(result)
         }
     }
+
+    fun dispatchOrderEmail(
+        orderId: String,
+        supplierId: String?,
+        onResult: (Result<String>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.dispatchOrderEmail(orderId, supplierId)
+            onResult(result)
+        }
+    }
 }

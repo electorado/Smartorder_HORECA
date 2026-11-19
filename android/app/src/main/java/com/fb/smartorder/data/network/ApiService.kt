@@ -67,6 +67,12 @@ interface ApiService {
         @Body order: OrderRequest
     ): Response<OrderResponse>
 
+    @POST("api/v1/orders/{order_id}/dispatch-email")
+    suspend fun dispatchOrderEmail(
+        @Path("order_id") orderId: String,
+        @Query("supplier_id") supplierId: String? = null
+    ): Response<Map<String, Any>>
+
     @GET("api/v1/orders")
     suspend fun getOrdersHistory(): Response<OrdersHistoryResponse>
 

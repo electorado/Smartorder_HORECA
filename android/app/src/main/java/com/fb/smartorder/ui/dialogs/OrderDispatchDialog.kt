@@ -15,13 +15,14 @@ import androidx.core.content.ContextCompat
 import com.fb.smartorder.R
 import com.fb.smartorder.model.OrderDetailResponse
 import com.fb.smartorder.model.SupplierSubOrderResponse
+import com.fb.smartorder.ui.ProductViewModel
 import com.fb.smartorder.util.PdfOrderGenerator
 import com.fb.smartorder.util.SupplierContactManager
 import java.util.Locale
 
 /**
  * Diálogo modal para la gestión del checklist de despacho de pedidos a proveedores
- * por WhatsApp, Email y generación de PDF.
+ * por WhatsApp, Email (Brevo SMTP directo) y generación de PDF.
  */
 object OrderDispatchDialog {
 
@@ -30,6 +31,7 @@ object OrderDispatchDialog {
         orderId: String?,
         suborders: List<SupplierSubOrderResponse>,
         orderDetail: OrderDetailResponse? = null,
+        viewModel: ProductViewModel? = null,
         onClearComanda: () -> Unit
     ) {
         if (suborders.isEmpty()) {
@@ -122,7 +124,7 @@ object OrderDispatchDialog {
 
                 if (so.emailDispatched == true) {
                     layoutSent.visibility = View.VISIBLE
-                    tvSentText.text = "ENVIADO (EMAIL)"
+                    tvSentText.text = "ENVIADO (EMAIL · BREVO)"
                     if (!so.supplierPhone.isNullOrBlank()) {
                         btnSend.visibility = View.VISIBLE
                         btnSend.text = "Enviar copia por WhatsApp"
@@ -152,11 +154,55 @@ object OrderDispatchDialog {
                         btnSend.visibility = View.GONE
                     }
                 } else {
-                    btnSend.text = "Enviar Email"
+                    btnSend.text = "Enviar Email (Brevo SMTP)"
                     btnSend.visibility = View.VISIBLE
                     layoutSent.visibility = View.GONE
                     btnSend.setOnClickListener {
-                        SupplierContactManager.promptSaveContactIfNeeded(activity, so) {
+                        if (orderId != null && viewModel != null) {
+                            btnSend.isEnabled = false
+                            btnSend.text = "Enviando vía SMTP..."
+                            viewModel.dispatchOrderEmail(orderId, so.supplierId) { result ->
+                                activity.runOnUiThread {
+                                    result.fold(
+                                        onSuccess = { msg ->
+                                            Toast.makeText(activity, "¡Email enviado a ${so.supplierName}!", Toast.LENGTH_SHORT).show()
+                                            dispatchedSet.add(sKey)
+                                            btnSend.visibility = View.GONE
+                                            layoutSent.visibility = View.VISIBLE
+                                            tvSentText.text = "ENVIADO (EMAIL · BREVO)"
+                                            updateProgress()
+                                        },
+                                        onFailure = { err ->
+                                            btnSend.isEnabled = true
+                                            btnSend.text = "Reintentar Email (SMTP)"
+                                            AlertDialog.Builder(activity)
+                                                .setTitle("Aviso de Entrega de Correo")
+                                                .setMessage("No se pudo conectar directamente con Brevo SMTP (${err.message}). ¿Deseas abrir tu cliente de correo (Gmail/Outlook) como respaldo?")
+                                                .setPositiveButton("Abrir correo") { _, _ ->
+                                                    val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                                                        data = Uri.parse("mailto:${so.supplierEmail ?: ""}")
+                                                        putExtra(Intent.EXTRA_SUBJECT, "Pedido F&B SmartOrder - ${so.supplierName}")
+                                                        putExtra(Intent.EXTRA_TEXT, so.whatsappText ?: "Pedido de cocina")
+                                                    }
+                                                    try {
+                                                        activity.startActivity(emailIntent)
+                                                        dispatchedSet.add(sKey)
+                                                        btnSend.visibility = View.GONE
+                                                        layoutSent.visibility = View.VISIBLE
+                                                        tvSentText.text = "ENVIADO (EMAIL EXTERNO)"
+                                                        updateProgress()
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(activity, "No se encontró aplicación de correo", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                                .setNegativeButton("Cancelar", null)
+                                                .show()
+                                        }
+                                    )
+                                }
+                            }
+                        } else {
+                            // En caso de que no haya referencia a la API, fallback a Intent
                             val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
                                 data = Uri.parse("mailto:${so.supplierEmail ?: ""}")
                                 putExtra(Intent.EXTRA_SUBJECT, "Pedido F&B SmartOrder - ${so.supplierName}")
