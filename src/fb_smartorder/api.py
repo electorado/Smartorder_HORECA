@@ -117,9 +117,12 @@ def send_order_email_smtp(
     from email.message import EmailMessage
 
     smtp_host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
-    smtp_user = os.getenv("SMTP_USER", "c3e19e001@smtp-brevo.com")
-    smtp_pwd = os.getenv("SMTP_PASSWORD", "xsmtpsib-6965a5e17ef4c854c9e1e2b137c506ffffaf43bf1870e770d7a9debcd55e2bcf-1dCRyMTa28bNE0d5")
-    smtp_from = os.getenv("SMTP_FROM", "pablomoncayovega@gmail.com")
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pwd = os.getenv("SMTP_PASSWORD", "")
+    smtp_from = os.getenv("SMTP_FROM", "pedidos@fb-smartorder.com")
+
+    if not smtp_user or not smtp_pwd:
+        raise RuntimeError("Configuración SMTP incompleta: configure SMTP_USER y SMTP_PASSWORD en variables de entorno o archivo .env")
 
     user_doc = db["usuarios"].find_one({"email": user_email})
     chef_name = (user_doc.get("name") if user_doc else None) or "Cocinero"
@@ -180,9 +183,12 @@ def send_password_recovery_email_brevo(
     from email.message import EmailMessage
 
     smtp_host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
-    smtp_user = os.getenv("SMTP_USER", "c3e19e001@smtp-brevo.com")
-    smtp_pwd = os.getenv("SMTP_PASSWORD", "xsmtpsib-6965a5e17ef4c854c9e1e2b137c506ffffaf43bf1870e770d7a9debcd55e2bcf-1dCRyMTa28bNE0d5")
-    smtp_from = os.getenv("SMTP_FROM", "pablomoncayovega@gmail.com")
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pwd = os.getenv("SMTP_PASSWORD", "")
+    smtp_from = os.getenv("SMTP_FROM", "pedidos@fb-smartorder.com")
+
+    if not smtp_user or not smtp_pwd:
+        raise RuntimeError("Configuración SMTP incompleta: configure SMTP_USER y SMTP_PASSWORD en variables de entorno o archivo .env")
 
     msg = EmailMessage()
     msg["Subject"] = "Recuperación de contraseña · F&B SmartOrder"
@@ -569,9 +575,10 @@ def get_ingredients(query: Optional[str] = None):
         db = get_database()
         filter_query = {}
         if query:
+            safe_query = re.escape(query.strip())
             filter_query["$or"] = [
-                {"name": {"$regex": query, "$options": "i"}},
-                {"category": {"$regex": query, "$options": "i"}}
+                {"name": {"$regex": safe_query, "$options": "i"}},
+                {"category": {"$regex": safe_query, "$options": "i"}}
             ]
 
         masters = list(db["ingredientes_maestros"].find(filter_query, {"_id": 0}))
@@ -614,11 +621,12 @@ def get_products(
         if supplier_id and isinstance(supplier_id, str):
             filter_query["supplier_id"] = supplier_id
 
-        if query and isinstance(query, str):
+        if query and isinstance(query, str) and query.strip():
+            safe_query = re.escape(query.strip())
             filter_query["$or"] = [
-                {"raw_name": {"$regex": query, "$options": "i"}},
-                {"clean_name": {"$regex": query, "$options": "i"}},
-                {"supplier_name": {"$regex": query, "$options": "i"}}
+                {"raw_name": {"$regex": safe_query, "$options": "i"}},
+                {"clean_name": {"$regex": safe_query, "$options": "i"}},
+                {"supplier_name": {"$regex": safe_query, "$options": "i"}}
             ]
 
         raw_items = list(db["productos_brutos"].find(filter_query))
