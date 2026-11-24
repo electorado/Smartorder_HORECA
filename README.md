@@ -117,8 +117,8 @@ flowchart TB
         WAPP["📲 WhatsApp Click-to-Chat Protocol<br/>(Intents nativos Android)"]
     end
 
-    AND <-->|HTTP / JSON (Retrofit 2)| FAST
-    WEB <-->|Llamada directa / Driver PyMongo| FAST
+    AND <-->|"HTTP / JSON (Retrofit 2)"| FAST
+    WEB <-->|"Driver PyMongo"| FAST
     FAST <--> CORE_ENGINE
     CORE_ENGINE <--> MONGO
     CORE_ENGINE <--> GRIDFS
