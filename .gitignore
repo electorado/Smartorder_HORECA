@@ -46,6 +46,8 @@ Thumbs.db
 
 # === Documentación local / borradores de entrega ===
 docs/
+scratch/
+*.docx
 ANTIGRAVITY_GUIDE.md
 AGENTS.md
 
